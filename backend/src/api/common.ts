@@ -36,6 +36,9 @@ export class Common {
 
   static getFeesInRange(transactions: TransactionExtended[], rangeLength: number) {
     const filtered: TransactionExtended[] = [];
+    return [];
+
+
     let lastValidRate = Infinity;
     // filter out anomalous fee rates to ensure monotonic range
     for (const tx of transactions) {

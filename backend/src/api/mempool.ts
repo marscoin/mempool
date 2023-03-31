@@ -117,8 +117,11 @@ class Mempool {
     logger.debug(`Updating mempool...`);
     const start = new Date().getTime();
     let hasChange: boolean = false;
+    logger.debug(`Mem1`);
     const currentMempoolSize = Object.keys(this.mempoolCache).length;
+    logger.debug(`Mem2`);
     const transactions = await bitcoinApi.$getRawMempool();
+    logger.debug(`Mem3`)
     const diff = transactions.length - currentMempoolSize;
     const newTransactions: TransactionExtended[] = [];
 
@@ -127,11 +130,13 @@ class Mempool {
     if (!this.inSync) {
       loadingIndicators.setProgress('mempool', Object.keys(this.mempoolCache).length / transactions.length * 100);
     }
-
+    logger.debug(`Mem4`);
     for (const txid of transactions) {
       if (!this.mempoolCache[txid]) {
         try {
+	  logger.debug(`Mem5`);
           const transaction = await transactionUtils.$getTransactionExtended(txid);
+	  logger.debug(`Mem6`);
           this.mempoolCache[txid] = transaction;
           if (this.inSync) {
             this.txPerSecondArray.push(new Date().getTime());

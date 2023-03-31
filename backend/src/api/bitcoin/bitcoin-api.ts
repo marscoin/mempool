@@ -5,6 +5,7 @@ import { IEsploraApi } from './esplora-api.interface';
 import blocks from '../blocks';
 import mempool from '../mempool';
 import { TransactionExtended } from '../../mempool.interfaces';
+import logger from '../../logger';
 
 class BitcoinApi implements AbstractBitcoinApi {
   private rawMempoolCache: IBitcoinApi.RawMempool | null = null;
@@ -34,22 +35,26 @@ class BitcoinApi implements AbstractBitcoinApi {
 
   $getRawTransaction(txId: string, skipConversion = false, addPrevout = false, lazyPrevouts = false): Promise<IEsploraApi.Transaction> {
     // If the transaction is in the mempool we already converted and fetched the fee. Only prevouts are missing
+    logger.debug(`getRawTx 1`);
     const txInMempool = mempool.getMempool()[txId];
     if (txInMempool && addPrevout) {
       return this.$addPrevouts(txInMempool);
     }
-
-    return this.bitcoindClient.getRawTransaction(txId, true)
+    logger.debug(`getRawTx 2`);
+    return this.bitcoindClient.getRawTransaction(txId, 1)
       .then((transaction: IBitcoinApi.Transaction) => {
+	logger.debug(`got tx`);
         if (skipConversion) {
           transaction.vout.forEach((vout) => {
             vout.value = Math.round(vout.value * 100000000);
           });
           return transaction;
         }
+	logger.debug(`convertTx`);
         return this.$convertTransaction(transaction, addPrevout, lazyPrevouts);
       })
       .catch((e: Error) => {
+	logger.debug(`Some error`);
         if (e.message.startsWith('The genesis block coinbase')) {
           return this.$returnCoinbaseTransaction();
         }
@@ -77,12 +82,12 @@ class BitcoinApi implements AbstractBitcoinApi {
   }
 
   $getTxIdsForBlock(hash: string): Promise<string[]> {
-    return this.bitcoindClient.getBlock(hash, 1)
+    return this.bitcoindClient.getBlock(hash)
       .then((rpcBlock: IBitcoinApi.Block) => rpcBlock.tx);
   }
 
   $getRawBlock(hash: string): Promise<Buffer> {
-    return this.bitcoindClient.getBlock(hash, 0)
+    return this.bitcoindClient.getBlock(hash)
       .then((raw: string) => Buffer.from(raw, "hex"));
   }
 
@@ -179,18 +184,23 @@ class BitcoinApi implements AbstractBitcoinApi {
   }
 
   protected async $convertTransaction(transaction: IBitcoinApi.Transaction, addPrevout: boolean, lazyPrevouts = false): Promise<IEsploraApi.Transaction> {
+    logger.debug(`converting...`);
     let esploraTransaction: IEsploraApi.Transaction = {
       txid: transaction.txid,
       version: transaction.version,
       locktime: transaction.locktime,
       size: transaction.size,
-      weight: transaction.weight,
+      weight: transaction.size * 4,
       fee: 0,
       vin: [],
       vout: [],
       status: { confirmed: false },
     };
 
+    logger.debug(`second stage`);
+    logger.debug(`${transaction}`);
+    logger.debug(`...and...`);
+    logger.debug(`${transaction.vout}`);
     esploraTransaction.vout = transaction.vout.map((vout) => {
       return {
         value: Math.round(vout.value * 100000000),
@@ -202,6 +212,7 @@ class BitcoinApi implements AbstractBitcoinApi {
       };
     });
 
+    logger.debug(`third stage`);
     esploraTransaction.vin = transaction.vin.map((vin) => {
       return {
         is_coinbase: !!vin.coinbase,
@@ -211,12 +222,13 @@ class BitcoinApi implements AbstractBitcoinApi {
         sequence: vin.sequence,
         txid: vin.txid || '',
         vout: vin.vout || 0,
-        witness: vin.txinwitness || [],
+        witness: [],
         inner_redeemscript_asm: '',
         inner_witnessscript_asm: '',
       };
     });
 
+    logger.debug(`final stage`);
     if (transaction.confirmations) {
       esploraTransaction.status = {
         confirmed: true,
@@ -225,13 +237,13 @@ class BitcoinApi implements AbstractBitcoinApi {
         block_time: transaction.blocktime,
       };
     }
-
+    logger.debug(`after final`);
     if (addPrevout) {
       esploraTransaction = await this.$calculateFeeFromInputs(esploraTransaction, false, lazyPrevouts);
     } else if (!transaction.confirmations) {
       esploraTransaction = await this.$appendMempoolFeeData(esploraTransaction);
     }
-
+    logger.debug(`returning converted...`);
     return esploraTransaction;
   }
 
@@ -259,16 +271,23 @@ class BitcoinApi implements AbstractBitcoinApi {
     if (transaction.fee) {
       return transaction;
     }
+    logger.debug(`append Mempool fee data`);
     let mempoolEntry: IBitcoinApi.MempoolEntry;
     if (!mempool.isInSync() && !this.rawMempoolCache) {
+      logger.debug(`memverbose`);
       this.rawMempoolCache = await this.$getRawMempoolVerbose();
     }
+    logger.debug(`second part`);
     if (this.rawMempoolCache && this.rawMempoolCache[transaction.txid]) {
+      logger.debug(`rawmem`);
       mempoolEntry = this.rawMempoolCache[transaction.txid];
     } else {
-      mempoolEntry = await this.$getMempoolEntry(transaction.txid);
+      logger.debug(`mementry`);
+      //function not yet supported in Marscoin
+      //mempoolEntry = await this.$getMempoolEntry(transaction.txid);
     }
-    transaction.fee = Math.round(mempoolEntry.fees.base * 100000000);
+    //logger.debug(`calc base fee`);
+    transaction.fee = 0.0; //Math.round(mempoolEntry.fees.base * 100000000);
     return transaction;
   }
 
@@ -286,7 +305,7 @@ class BitcoinApi implements AbstractBitcoinApi {
 
   protected $returnCoinbaseTransaction(): Promise<IEsploraApi.Transaction> {
     return this.bitcoindClient.getBlockHash(0).then((hash: string) =>
-      this.bitcoindClient.getBlock(hash, 2)
+      this.bitcoindClient.getBlock(hash)
         .then((block: IBitcoinApi.Block) => {
           return this.$convertTransaction(Object.assign(block.tx[0], {
             confirmations: blocks.getCurrentBlockHeight() + 1,
@@ -296,6 +315,7 @@ class BitcoinApi implements AbstractBitcoinApi {
   }
 
   private $getMempoolEntry(txid: string): Promise<IBitcoinApi.MempoolEntry> {
+    logger.debug(`getMemEntry`);
     return this.bitcoindClient.getMempoolEntry(txid);
   }
 
@@ -305,17 +325,19 @@ class BitcoinApi implements AbstractBitcoinApi {
 
 
   private async $calculateFeeFromInputs(transaction: IEsploraApi.Transaction, addPrevout: boolean, lazyPrevouts: boolean): Promise<IEsploraApi.Transaction> {
+    logger.debug(`calc start`);
     if (transaction.vin[0].is_coinbase) {
       transaction.fee = 0;
       return transaction;
     }
     let totalIn = 0;
-
+    logger.debug(`calculate Fee from Input`);
     for (let i = 0; i < transaction.vin.length; i++) {
       if (lazyPrevouts && i > 12) {
         transaction.vin[i].lazy = true;
         continue;
       }
+      logger.debug(`fee loop`);
       const innerTx = await this.$getRawTransaction(transaction.vin[i].txid, false, false);
       transaction.vin[i].prevout = innerTx.vout[transaction.vin[i].vout];
       this.addInnerScriptsToVin(transaction.vin[i]);
@@ -327,6 +349,7 @@ class BitcoinApi implements AbstractBitcoinApi {
       const totalOut = transaction.vout.reduce((p, output) => p + output.value, 0);
       transaction.fee = parseFloat((totalIn - totalOut).toFixed(8));
     }
+    logger.debug(`return tx from fee calc`);
     return transaction;
   }
 

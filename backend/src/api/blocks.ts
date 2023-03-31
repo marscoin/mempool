@@ -95,7 +95,9 @@ class Blocks {
           logger.debug(`Indexing tx ${i + 1} of ${txIds.length} in block #${blockHeight}`);
         }
         try {
+	  logger.debug(`about to get Tx extended`)
           const tx = await transactionUtils.$getTransactionExtended(txIds[i]);
+	  logger.debug(`..got tx extended`)
           transactions.push(tx);
           transactionsFetched++;
         } catch (e) {
@@ -147,9 +149,10 @@ class Blocks {
     const stripped = block.tx.map((tx) => {
       return {
         txid: tx.txid,
-        vsize: tx.weight / 4,
+        //vsize: tx.weight / 4,
+	vsize: tx.vsize,
         fee: tx.fee ? Math.round(tx.fee * 100000000) : 0,
-        value: Math.round(tx.vout.reduce((acc, vout) => acc + (vout.value ? vout.value : 0), 0) * 100000000)
+        value: tx.vout ? Math.round(tx.vout.reduce((acc, vout) => acc + (vout.value ? vout.value : 0), 0) * 100000000) : 0
       };
     });
 
@@ -167,10 +170,12 @@ class Blocks {
    */
   private async $getBlockExtended(block: IEsploraApi.Block, transactions: TransactionExtended[]): Promise<BlockExtended> {
     const blockExtended: BlockExtended = Object.assign({ extras: {} }, block);
+    logger.debug(`in getBlockExt`)
     blockExtended.extras.reward = transactions[0].vout.reduce((acc, curr) => acc + curr.value, 0);
     blockExtended.extras.coinbaseTx = transactionUtils.stripCoinbaseTransaction(transactions[0]);
     blockExtended.extras.coinbaseRaw = blockExtended.extras.coinbaseTx.vin[0].scriptsig;
     blockExtended.extras.usd = fiatConversion.getConversionRates().USD;
+    logger.debug(`first set complete`)
 
     if (block.height === 0) {
       blockExtended.extras.medianFee = 0; // 50th percentiles
@@ -179,16 +184,17 @@ class Blocks {
       blockExtended.extras.avgFee = 0;
       blockExtended.extras.avgFeeRate = 0;
     } else {
-      const stats = await bitcoinClient.getBlockStats(block.id, [
-        'feerate_percentiles', 'minfeerate', 'maxfeerate', 'totalfee', 'avgfee', 'avgfeerate'
-      ]);
-      blockExtended.extras.medianFee = stats.feerate_percentiles[2]; // 50th percentiles
-      blockExtended.extras.feeRange = [stats.minfeerate, stats.feerate_percentiles, stats.maxfeerate].flat();
-      blockExtended.extras.totalFees = stats.totalfee;
-      blockExtended.extras.avgFee = stats.avgfee;
-      blockExtended.extras.avgFeeRate = stats.avgfeerate;
+	logger.debug(`stats not available`)
+      //const stats = await bitcoinClient.getBlockStats(block.id, [
+      //  'feerate_percentiles', 'minfeerate', 'maxfeerate', 'totalfee', 'avgfee', 'avgfeerate'
+      //]);
+      blockExtended.extras.medianFee = 0.0 //stats.feerate_percentiles[2]; // 50th percentiles
+      blockExtended.extras.feeRange = [0.0, 0.0, 0.0] //[stats.minfeerate, stats.feerate_percentiles, stats.maxfeerate].flat();
+      blockExtended.extras.totalFees = 0.0 //stats.totalfee;
+      blockExtended.extras.avgFee = 0.0 //stats.avgfee;
+      blockExtended.extras.avgFeeRate = 0.0 //stats.avgfeerate;
     }
-
+    logger.debug(`next up`)
     if (['mainnet', 'testnet', 'signet'].includes(config.MEMPOOL.NETWORK)) {
       let pool: PoolTag;
       if (blockExtended.extras?.coinbaseTx !== undefined) {
@@ -200,7 +206,7 @@ class Blocks {
           pool = poolsParser.unknownPool;
         }
       }
-
+      logger.debug(`Test8`)
       if (!pool) { // We should never have this situation in practise
         logger.warn(`Cannot assign pool to block ${blockExtended.height} and 'unknown' pool does not exist. ` +
           `Check your "pools" table entries`);
@@ -211,13 +217,18 @@ class Blocks {
           slug: pool.slug,
         };
       }
-
+      logger.debug(`Test 7`)
       const auditScore = await BlocksAuditsRepository.$getBlockAuditScore(block.id);
       if (auditScore != null) {
         blockExtended.extras.matchRate = auditScore.matchRate;
       }
     }
 
+    if(!block.tx_count){
+	logger.debug(`missing tx_count`);
+    	blockExtended.tx_count = transactions.length;
+    
+    }
     return blockExtended;
   }
 
@@ -435,6 +446,8 @@ class Blocks {
           const blockExtended = await this.$getBlockExtended(block, transactions);
 
           newlyIndexed++;
+	  blockExtended.weight = blockExtended.size * 4;
+	  logger.debug(`Weight3: ${blockExtended.weight}`)
           await blocksRepository.$saveBlockInDatabase(blockExtended);
         }
 
@@ -500,15 +513,23 @@ class Blocks {
         this.currentBlockHeight++;
         logger.debug(`New block found (#${this.currentBlockHeight})!`);
       }
-
+      logger.debug(`Hello Test`);
       const blockHash = await bitcoinApi.$getBlockHash(this.currentBlockHeight);
-      const verboseBlock = await bitcoinClient.getBlock(blockHash, 2);
+      logger.debug(`Hello Test1 ${blockHash}`);
+      const verboseBlock = await bitcoinClient.getBlock(blockHash);
+      logger.debug(`Hello Test2`);
       const block = BitcoinApi.convertBlock(verboseBlock);
+      logger.debug(`Hello Test3`);
       const txIds: string[] = await bitcoinApi.$getTxIdsForBlock(blockHash);
+      logger.debug(`Hello Test4`);
       const transactions = await this.$getTransactionsExtended(blockHash, block.height, false);
+      logger.debug(`Hello Test5`);
       const blockExtended: BlockExtended = await this.$getBlockExtended(block, transactions);
+      logger.debug(`Hello Test6`);
       const blockSummary: BlockSummary = this.summarizeBlock(verboseBlock);
 
+
+      logger.debug(`Block Hash: ${blockHash}`);
       // start async callbacks
       const callbackPromises = this.newAsyncBlockCallbacks.map((cb) => cb(blockExtended, txIds, transactions));
 
@@ -534,6 +555,8 @@ class Blocks {
             logger.info(`Re-indexed 10 blocks and summaries. Also re-indexed the last difficulty adjustments. Will re-index latest hashrates in a few seconds.`);
             indexer.reindex();
           }
+	  blockExtended.weight = blockExtended.size * 4;
+	  logger.debug(`Weight4: ${blockExtended.weight}`)
           await blocksRepository.$saveBlockInDatabase(blockExtended);
 
           const lastestPriceId = await PricesRepository.$getLatestPriceId();
@@ -608,7 +631,9 @@ class Blocks {
     const block = BitcoinApi.convertBlock(await bitcoinClient.getBlock(blockHash));
     const transactions = await this.$getTransactionsExtended(blockHash, block.height, true);
     const blockExtended = await this.$getBlockExtended(block, transactions);
-
+    const ttest = block.weight * 4;
+    logger.debug(`Weight1: ${ttest}`)
+    blockExtended.weight = ttest;
     await blocksRepository.$saveBlockInDatabase(blockExtended);
 
     return prepareBlock(blockExtended);
@@ -645,6 +670,8 @@ class Blocks {
     const blockExtended = await this.$getBlockExtended(block, transactions);
     if (Common.indexingEnabled()) {
       delete(blockExtended['coinbaseTx']);
+      blockExtended.weight = blockExtended.size * 4;
+      logger.debug(`Weight2: ${blockExtended.weight}`)
       await blocksRepository.$saveBlockInDatabase(blockExtended);
     }
 
@@ -748,6 +775,7 @@ class Blocks {
   }
 
   public getCurrentBlockHeight(): number {
+    logger.debug(`current height`);
     return this.currentBlockHeight;
   }
 

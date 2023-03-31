@@ -2,6 +2,7 @@ import { TransactionExtended, TransactionMinerInfo } from '../mempool.interfaces
 import { IEsploraApi } from './bitcoin/esplora-api.interface';
 import { Common } from './common';
 import bitcoinApi, { bitcoinCoreApi } from './bitcoin/bitcoin-api-factory';
+import logger from '../logger';
 
 class TransactionUtils {
   constructor() { }
@@ -31,6 +32,7 @@ class TransactionUtils {
     if (forceCore === true) {
       transaction  = await bitcoinCoreApi.$getRawTransaction(txId, true);
     } else {
+      logger.debug(`about to get tx details...`);
       transaction  = await bitcoinApi.$getRawTransaction(txId, false, addPrevouts, lazyPrevouts);
     }
     return this.extendTransaction(transaction);

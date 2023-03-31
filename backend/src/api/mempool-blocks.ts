@@ -75,6 +75,7 @@ class MempoolBlocks {
     logger.debug('Mempool blocks calculated in ' + time / 1000 + ' seconds');
 
     const blocks = this.calculateMempoolBlocks(memPoolArray, this.mempoolBlocks);
+    logger.debug(`deltas`);
     const deltas = this.calculateMempoolDeltas(this.mempoolBlocks, blocks);
 
     this.mempoolBlocks = blocks;
@@ -286,6 +287,7 @@ class MempoolBlocks {
 
   private dataToMempoolBlocks(transactions: TransactionExtended[],
     blockSize: number | undefined, blockWeight: number | undefined, blocksIndex: number): MempoolBlockWithTransactions {
+    logger.debug(`dataToMem0`);
     let totalSize = blockSize || 0;
     let totalWeight = blockWeight || 0;
     if (blockSize === undefined && blockWeight === undefined) {
@@ -293,9 +295,10 @@ class MempoolBlocks {
       totalWeight = 0;
       transactions.forEach(tx => {
         totalSize += tx.size;
-        totalWeight += tx.weight;
+        totalWeight += tx.size * 4;
       });
     }
+    logger.debug(`dataToMem 1`);
     let rangeLength = 4;
     if (blocksIndex === 0) {
       rangeLength = 8;
@@ -305,12 +308,13 @@ class MempoolBlocks {
     } else if (transactions.length > 10000) {
       rangeLength = 8;
     }
+    logger.debug(`dataToMem 2`);
     return {
       blockSize: totalSize,
       blockVSize: totalWeight / 4,
       nTx: transactions.length,
       totalFees: transactions.reduce((acc, cur) => acc + cur.fee, 0),
-      medianFee: Common.percentile(transactions.map((tx) => tx.effectiveFeePerVsize), config.MEMPOOL.RECOMMENDED_FEE_PERCENTILE),
+      medianFee: 0.0, //Common.percentile(transactions.map((tx) => tx.effectiveFeePerVsize), config.MEMPOOL.RECOMMENDED_FEE_PERCENTILE),
       feeRange: Common.getFeesInRange(transactions, rangeLength),
       transactionIds: transactions.map((tx) => tx.txid),
       transactions: transactions.map((tx) => Common.stripTransaction(tx)),
