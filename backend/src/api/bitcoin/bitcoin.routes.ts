@@ -6,7 +6,7 @@ import websocketHandler from '../websocket-handler';
 import mempool from '../mempool';
 import feeApi from '../fee-api';
 import mempoolBlocks from '../mempool-blocks';
-import bitcoinApi from './bitcoin-api-factory';
+import bitcoinApi, { bitcoinCoreApi } from './bitcoin-api-factory';
 import { Common } from '../common';
 import backendInfo from '../backend-info';
 import transactionUtils from '../transaction-utils';
@@ -95,6 +95,8 @@ class BitcoinRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/summary', this.getStrippedBlockTransactions)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/audit-summary', this.getBlockAuditSummary)
       .post(config.MEMPOOL.API_URL_PREFIX + 'psbt/addparents', this.postPsbtCompletion)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'blocks-bulk/:from', this.getBlocksByBulk.bind(this))
+      .get(config.MEMPOOL.API_URL_PREFIX + 'blocks-bulk/:from/:to', this.getBlocksByBulk.bind(this))
       ;
 
       if (config.MEMPOOL.BACKEND !== 'esplora') {
@@ -215,13 +217,20 @@ class BitcoinRoutes {
       res.json(cpfpInfo);
       return;
     } else {
-      const cpfpInfo = await transactionRepository.$getCpfpInfo(req.params.txId);
+      let cpfpInfo;
+      if (config.DATABASE.ENABLED) {
+        cpfpInfo = await transactionRepository.$getCpfpInfo(req.params.txId);
+      }
       if (cpfpInfo) {
         res.json(cpfpInfo);
         return;
+      } else {
+        res.json({
+          ancestors: []
+        });
+        return;
       }
     }
-    res.status(404).send(`Transaction has no CPFP info available.`);
   }
 
   private getBackendInfo(req: Request, res: Response) {
@@ -402,6 +411,41 @@ class BitcoinRoutes {
     }
   }
 
+  private async getBlocksByBulk(req: Request, res: Response) {
+    try {
+      if (['mainnet', 'testnet', 'signet'].includes(config.MEMPOOL.NETWORK) === false) { // Liquid, Bisq - Not implemented
+        return res.status(404).send(`This API is only available for Bitcoin networks`);
+      }
+      if (config.MEMPOOL.MAX_BLOCKS_BULK_QUERY <= 0) {
+        return res.status(404).send(`This API is disabled. Set config.MEMPOOL.MAX_BLOCKS_BULK_QUERY to a positive number to enable it.`);
+      }
+      if (!Common.indexingEnabled()) {
+        return res.status(404).send(`Indexing is required for this API`);
+      }
+
+      const from = parseInt(req.params.from, 10);
+      if (!req.params.from || from < 0) {
+        return res.status(400).send(`Parameter 'from' must be a block height (integer)`);
+      }
+      const to = req.params.to === undefined ? await bitcoinApi.$getBlockHeightTip() : parseInt(req.params.to, 10);
+      if (to < 0) {
+        return res.status(400).send(`Parameter 'to' must be a block height (integer)`);
+      }
+      if (from > to) {
+        return res.status(400).send(`Parameter 'to' must be a higher block height than 'from'`);
+      }
+      if ((to - from + 1) > config.MEMPOOL.MAX_BLOCKS_BULK_QUERY) {
+        return res.status(400).send(`You can only query ${config.MEMPOOL.MAX_BLOCKS_BULK_QUERY} blocks at once.`);
+      }
+
+      res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
+      res.json(await blocks.$getBlocksBetweenHeight(from, to));
+
+    } catch (e) {
+      res.status(500).send(e instanceof Error ? e.message : e);
+    }
+  }
+
   private async getLegacyBlocks(req: Request, res: Response) {
     try {
       const returnBlocks: IEsploraApi.Block[] = [];
@@ -424,7 +468,7 @@ class BitcoinRoutes {
           returnBlocks.push(localBlock);
           nextHash = localBlock.previousblockhash;
         } else {
-          const block = await bitcoinApi.$getBlock(nextHash);
+          const block = await bitcoinCoreApi.$getBlock(nextHash);
           returnBlocks.push(block);
           nextHash = block.previousblockhash;
         }
@@ -607,7 +651,7 @@ class BitcoinRoutes {
       if (result) {
         res.json(result);
       } else {
-        res.status(404).send('not found');
+        res.status(204).send();
       }
     } catch (e) {
       res.status(500).send(e instanceof Error ? e.message : e);

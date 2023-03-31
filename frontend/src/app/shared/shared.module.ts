@@ -23,9 +23,9 @@ import { RelativeUrlPipe } from './pipes/relative-url/relative-url.pipe';
 import { ScriptpubkeyTypePipe } from './pipes/scriptpubkey-type-pipe/scriptpubkey-type.pipe';
 import { BytesPipe } from './pipes/bytes-pipe/bytes.pipe';
 import { WuBytesPipe } from './pipes/bytes-pipe/wubytes.pipe';
+import { FiatCurrencyPipe } from './pipes/fiat-currency.pipe';
 import { BlockchainComponent } from '../components/blockchain/blockchain.component';
-import { TimeSinceComponent } from '../components/time-since/time-since.component';
-import { TimeUntilComponent } from '../components/time-until/time-until.component';
+import { TimeComponent } from '../components/time/time.component';
 import { ClipboardComponent } from '../components/clipboard/clipboard.component';
 import { QrcodeComponent } from '../components/qrcode/qrcode.component';
 import { FiatComponent } from '../fiat/fiat.component';
@@ -34,6 +34,7 @@ import { TxFeaturesComponent } from '../components/tx-features/tx-features.compo
 import { TxFeeRatingComponent } from '../components/tx-fee-rating/tx-fee-rating.component';
 import { ReactiveFormsModule } from '@angular/forms';
 import { LanguageSelectorComponent } from '../components/language-selector/language-selector.component';
+import { FiatSelectorComponent } from '../components/fiat-selector/fiat-selector.component';
 import { ColoredPriceDirective } from './directives/colored-price.directive';
 import { NoSanitizePipe } from './pipes/no-sanitize.pipe';
 import { MempoolBlocksComponent } from '../components/mempool-blocks/mempool-blocks.component';
@@ -51,13 +52,14 @@ import { AddressComponent } from '../components/address/address.component';
 import { SearchFormComponent } from '../components/search-form/search-form.component';
 import { AddressLabelsComponent } from '../components/address-labels/address-labels.component';
 import { FooterComponent } from '../components/footer/footer.component';
-import { TimeSpanComponent } from '../components/time-span/time-span.component';
 import { AssetComponent } from '../components/asset/asset.component';
 import { AssetsComponent } from '../components/assets/assets.component';
 import { AssetsNavComponent } from '../components/assets/assets-nav/assets-nav.component';
 import { StatusViewComponent } from '../components/status-view/status-view.component';
 import { FeesBoxComponent } from '../components/fees-box/fees-box.component';
 import { DifficultyComponent } from '../components/difficulty/difficulty.component';
+import { DifficultyTooltipComponent } from '../components/difficulty/difficulty-tooltip.component';
+import { DifficultyMiningComponent } from '../components/difficulty-mining/difficulty-mining.component';
 import { TermsOfServiceComponent } from '../components/terms-of-service/terms-of-service.component';
 import { TxBowtieGraphComponent } from '../components/tx-bowtie-graph/tx-bowtie-graph.component';
 import { TxBowtieGraphTooltipComponent } from '../components/tx-bowtie-graph-tooltip/tx-bowtie-graph-tooltip.component';
@@ -86,13 +88,13 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
 @NgModule({
   declarations: [
     ClipboardComponent,
-    TimeSinceComponent,
-    TimeUntilComponent,
+    TimeComponent,
     QrcodeComponent,
     FiatComponent,
     TxFeaturesComponent,
     TxFeeRatingComponent,
     LanguageSelectorComponent,
+    FiatSelectorComponent,
     ScriptpubkeyTypePipe,
     RelativeUrlPipe,
     NoSanitizePipe,
@@ -107,6 +109,7 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     CapAddressPipe,
     Decimal2HexPipe,
     FeeRoundingPipe,
+    FiatCurrencyPipe,
     ColoredPriceDirective,
     BlockchainComponent,
     MempoolBlocksComponent,
@@ -125,7 +128,6 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     TransactionsListComponent,
     AddressComponent,
     SearchFormComponent,
-    TimeSpanComponent,
     AddressLabelsComponent,
     FooterComponent,
     AssetComponent,
@@ -133,6 +135,8 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     StatusViewComponent,
     FeesBoxComponent,
     DifficultyComponent,
+    DifficultyMiningComponent,
+    DifficultyTooltipComponent,
     TxBowtieGraphComponent,
     TxBowtieGraphTooltipComponent,
     TermsOfServiceComponent,
@@ -191,14 +195,14 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     NgbCollapseModule,
     InfiniteScrollModule,
     FontAwesomeModule,
-    TimeSinceComponent,
-    TimeUntilComponent,
+    TimeComponent,
     ClipboardComponent,
     QrcodeComponent,
     FiatComponent,
     TxFeaturesComponent,
     TxFeeRatingComponent,
     LanguageSelectorComponent,
+    FiatSelectorComponent,
     ScriptpubkeyTypePipe,
     RelativeUrlPipe,
     Hex2asciiPipe,
@@ -207,6 +211,7 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     BytesPipe,
     VbytesPipe,
     WuBytesPipe,
+    FiatCurrencyPipe,
     CeilPipe,
     ShortenStringPipe,
     CapAddressPipe,
@@ -226,7 +231,6 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     TransactionsListComponent,
     AddressComponent,
     SearchFormComponent,
-    TimeSpanComponent,
     AddressLabelsComponent,
     FooterComponent,
     AssetComponent,
@@ -234,6 +238,8 @@ import { GeolocationComponent } from '../shared/components/geolocation/geolocati
     StatusViewComponent,
     FeesBoxComponent,
     DifficultyComponent,
+    DifficultyMiningComponent,
+    DifficultyTooltipComponent,
     TxBowtieGraphComponent,
     TxBowtieGraphTooltipComponent,
     TermsOfServiceComponent,

@@ -21,11 +21,13 @@ export class StartComponent implements OnInit, OnDestroy {
   timeLtr: boolean = this.stateService.timeLtr.value;
   chainTipSubscription: Subscription;
   chainTip: number = -1;
+  tipIsSet: boolean = false;
   markBlockSubscription: Subscription;
   blockCounterSubscription: Subscription;
   @ViewChild('blockchainContainer') blockchainContainer: ElementRef;
 
   isMobile: boolean = false;
+  isiOS: boolean = false;
   blockWidth = 155;
   dynamicBlocksAmount: number = 8;
   blockCount: number = 0;
@@ -36,10 +38,15 @@ export class StartComponent implements OnInit, OnDestroy {
   pageIndex: number = 0;
   pages: any[] = [];
   pendingMark: number | void = null;
+  lastUpdate: number = 0;
+  lastMouseX: number;
+  velocity: number = 0;
 
   constructor(
     private stateService: StateService,
-  ) { }
+  ) {
+    this.isiOS = ['iPhone','iPod','iPad'].includes((navigator as any)?.userAgentData?.platform || navigator.platform);
+  }
 
   ngOnInit() {
     this.firstPageWidth = 40 + (this.blockWidth * this.dynamicBlocksAmount);
@@ -58,6 +65,7 @@ export class StartComponent implements OnInit, OnDestroy {
     });
     this.chainTipSubscription = this.stateService.chainTip$.subscribe((height) => {
       this.chainTip = height;
+      this.tipIsSet = true;
       this.updatePages();
       if (this.pendingMark != null) {
         this.scrollToBlock(this.pendingMark);
@@ -66,7 +74,7 @@ export class StartComponent implements OnInit, OnDestroy {
     });
     this.markBlockSubscription = this.stateService.markBlock$.subscribe((mark) => {
       if (mark?.blockHeight != null) {
-        if (this.chainTip >=0) {
+        if (this.tipIsSet) {
           if (!this.blockInViewport(mark.blockHeight)) {
             this.scrollToBlock(mark.blockHeight);
           }
@@ -77,21 +85,20 @@ export class StartComponent implements OnInit, OnDestroy {
     });
     this.stateService.blocks$
       .subscribe((blocks: any) => {
-        if (this.stateService.network !== '') {
-          return;
-        }
         this.countdown = 0;
         const block = blocks[0];
 
         for (const sb in specialBlocks) {
-          const height = parseInt(sb, 10);
-          const diff = height - block.height;
-          if (diff > 0 && diff <= 1008) {
-            this.countdown = diff;
-            this.eventName = specialBlocks[sb].labelEvent;
+          if (specialBlocks[sb].networks.includes(this.stateService.network || 'mainnet')) {
+            const height = parseInt(sb, 10);
+            const diff = height - block.height;
+            if (diff > 0 && diff <= 1008) {
+              this.countdown = diff;
+              this.eventName = specialBlocks[sb].labelEvent;
+            }
           }
         }
-        if (specialBlocks[block.height]) {
+        if (specialBlocks[block.height] && specialBlocks[block.height].networks.includes(this.stateService.network || 'mainnet')) {
           this.specialEvent = true;
           this.eventName = specialBlocks[block.height].labelEventCompleted;
           setTimeout(() => {
@@ -123,7 +130,7 @@ export class StartComponent implements OnInit, OnDestroy {
     this.minScrollWidth = this.firstPageWidth + (this.pageWidth * 2);
 
     if (firstVisibleBlock != null) {
-      this.scrollToBlock(firstVisibleBlock, offset);
+      this.scrollToBlock(firstVisibleBlock, offset + (this.isMobile ? this.blockWidth : 0));
     } else {
       this.updatePages();
     }
@@ -131,10 +138,23 @@ export class StartComponent implements OnInit, OnDestroy {
 
   onMouseDown(event: MouseEvent) {
     this.mouseDragStartX = event.clientX;
+    this.resetMomentum(event.clientX);
     this.blockchainScrollLeftInit = this.blockchainContainer.nativeElement.scrollLeft;
+  }
+  onPointerDown(event: PointerEvent) {
+    if (this.isiOS) {
+      event.preventDefault();
+      this.onMouseDown(event);
+    }
   }
   onDragStart(event: MouseEvent) { // Ignore Firefox annoying default drag behavior
     event.preventDefault();
+  }
+  onTouchMove(event: TouchEvent) {
+    // disable native scrolling on iOS
+    if (this.isiOS) {
+      event.preventDefault();
+    }
   }
 
   // We're catching the whole page event here because we still want to scroll blocks
@@ -142,6 +162,7 @@ export class StartComponent implements OnInit, OnDestroy {
   @HostListener('document:mousemove', ['$event'])
   onMouseMove(event: MouseEvent): void {
     if (this.mouseDragStartX != null) {
+      this.updateVelocity(event.clientX);
       this.stateService.setBlockScrollingInProgress(true);
       this.blockchainContainer.nativeElement.scrollLeft =
         this.blockchainScrollLeftInit + this.mouseDragStartX - event.clientX;
@@ -150,7 +171,60 @@ export class StartComponent implements OnInit, OnDestroy {
   @HostListener('document:mouseup', [])
   onMouseUp() {
     this.mouseDragStartX = null;
-    this.stateService.setBlockScrollingInProgress(false);
+    this.animateMomentum();
+  }
+  @HostListener('document:pointermove', ['$event'])
+  onPointerMove(event: PointerEvent): void {
+    if (this.isiOS) {
+      this.onMouseMove(event);
+    }
+  }
+  @HostListener('document:pointerup', [])
+  @HostListener('document:pointercancel', [])
+  onPointerUp() {
+    if (this.isiOS) {
+      this.onMouseUp();
+    }
+  }
+
+  resetMomentum(x: number) {
+    this.lastUpdate = performance.now();
+    this.lastMouseX = x;
+    this.velocity = 0;
+  }
+
+  updateVelocity(x: number) {
+    const now = performance.now();
+    let dt = now - this.lastUpdate;
+    if (dt > 0) {
+      this.lastUpdate = now;
+      const velocity = (x - this.lastMouseX) / dt;
+      this.velocity = (0.8 * this.velocity) + (0.2 * velocity);
+      this.lastMouseX = x;
+    }
+  }
+
+  animateMomentum() {
+    this.lastUpdate = performance.now();
+    requestAnimationFrame(() => {
+      const now = performance.now();
+      const dt = now - this.lastUpdate;
+      this.lastUpdate = now;
+      if (Math.abs(this.velocity) < 0.005) {
+        this.stateService.setBlockScrollingInProgress(false);
+      } else {
+        const deceleration = Math.max(0.0025, 0.001 * this.velocity * this.velocity) * (this.velocity > 0 ? -1 : 1);
+        const displacement = (this.velocity * dt) - (0.5 * (deceleration * dt * dt));
+        const dv = (deceleration * dt);
+        if ((this.velocity < 0 && dv + this.velocity > 0) || (this.velocity > 0 && dv + this.velocity < 0)) {
+          this.velocity = 0;
+        } else {
+          this.velocity += dv;
+        }
+        this.blockchainContainer.nativeElement.scrollLeft -= displacement;
+        this.animateMomentum();
+      }
+    });
   }
 
   onScroll(e) {
@@ -178,8 +252,10 @@ export class StartComponent implements OnInit, OnDestroy {
       setTimeout(() => { this.scrollToBlock(height, blockOffset); }, 50);
       return;
     }
-    const targetHeight = this.isMobile ? height - 1 : height;
-    const viewingPageIndex = this.getPageIndexOf(targetHeight);
+    if (this.isMobile) {
+      blockOffset -= this.blockWidth;
+    }
+    const viewingPageIndex = this.getPageIndexOf(height);
     const pages = [];
     this.pageIndex = Math.max(viewingPageIndex - 1, 0);
     let viewingPage = this.getPageAt(viewingPageIndex);
@@ -189,7 +265,7 @@ export class StartComponent implements OnInit, OnDestroy {
       viewingPage = this.getPageAt(viewingPageIndex);
     }
     const left = viewingPage.offset - this.getConvertedScrollOffset();
-    const blockIndex = viewingPage.height - targetHeight;
+    const blockIndex = viewingPage.height - height;
     const targetOffset = (this.blockWidth * blockIndex) + left;
     let deltaOffset = targetOffset - blockOffset;
 
@@ -263,6 +339,7 @@ export class StartComponent implements OnInit, OnDestroy {
 
   resetScroll(): void {
     this.scrollToBlock(this.chainTip);
+    this.blockchainContainer.nativeElement.scrollLeft = 0;
   }
 
   getPageIndexOf(height: number): number {
@@ -298,6 +375,10 @@ export class StartComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.blockchainContainer?.nativeElement) {
+      // clean up scroll position to prevent caching wrong scroll in Firefox
+      this.blockchainContainer.nativeElement.scrollLeft = 0;
+    }
     this.timeLtrSubscription.unsubscribe();
     this.chainTipSubscription.unsubscribe();
     this.markBlockSubscription.unsubscribe();

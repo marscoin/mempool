@@ -33,9 +33,11 @@ export interface DifficultyAdjustment {
   remainingBlocks: number;
   remainingTime: number;
   previousRetarget: number;
+  previousTime: number;
   nextRetargetHeight: number;
   timeAvg: number;
   timeOffset: number;
+  expectedBlocks: number;
 }
 
 export interface AddressInformation {
@@ -73,6 +75,7 @@ export interface SinglePoolStats {
   emptyBlockRatio: string;
   logo: string;
   slug: string;
+  avgMatchRate: number;
 }
 export interface PoolsStats {
   blockCount: number;
@@ -104,8 +107,8 @@ export interface PoolStat {
     '1w': number,
   };
   estimatedHashrate: number;
-  reportedHashrate: number;
-  luck?: number;
+  avgBlockHealth: number;
+  totalReward: number;
 }
 
 export interface BlockExtension {
@@ -113,9 +116,9 @@ export interface BlockExtension {
   medianFee?: number;
   feeRange?: number[];
   reward?: number;
-  coinbaseTx?: Transaction;
   coinbaseRaw?: string;
   matchRate?: number;
+  similarity?: number;
   pool?: {
     id: number;
     name: string;
@@ -149,6 +152,19 @@ export interface RewardStats {
   totalReward: number;
   totalFee: number;
   totalTx: number;
+}
+
+export interface BlockSizesAndWeights {
+  sizes: {
+    timestamp: number;
+    avgHeight: number;
+    avgSize: number;
+  }[];
+  weights: {
+    timestamp: number;
+    avgHeight: number;
+    avgWeight: number;
+  }[];
 }
 
 export interface AuditScore {

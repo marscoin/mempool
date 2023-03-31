@@ -2,9 +2,8 @@ import { ChangeDetectionStrategy, Component, Input, NgZone, OnInit, HostBinding 
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EChartsOption, PieSeriesOption } from 'echarts';
-import { concat, Observable } from 'rxjs';
+import { merge, Observable } from 'rxjs';
 import { map, share, startWith, switchMap, tap } from 'rxjs/operators';
-import { SinglePoolStats } from '../../interfaces/node-api.interface';
 import { SeoService } from '../../services/seo.service';
 import { StorageService } from '../..//services/storage.service';
 import { MiningService, MiningStats } from '../../services/mining.service';
@@ -26,6 +25,8 @@ export class PoolRankingComponent implements OnInit {
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
 
+  auditAvailable = false;
+  indexingAvailable = false;
   isLoading = true;
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -60,6 +61,10 @@ export class PoolRankingComponent implements OnInit {
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
     this.radioGroupForm.controls.dateSpan.setValue(this.miningWindowPreference);
 
+    this.indexingAvailable = (this.stateService.env.BASE_MODULE === 'mempool' &&
+      this.stateService.env.MINING_DASHBOARD === true);
+    this.auditAvailable = this.indexingAvailable && this.stateService.env.AUDIT;
+
     this.route
       .fragment
       .subscribe((fragment) => {
@@ -68,11 +73,12 @@ export class PoolRankingComponent implements OnInit {
         }
       });
 
-    this.miningStatsObservable$ = concat(
+    this.miningStatsObservable$ = merge(
       this.radioGroupForm.get('dateSpan').valueChanges
         .pipe(
           startWith(this.radioGroupForm.controls.dateSpan.value), // (trigger when the page loads)
           tap((value) => {
+            this.isLoading = true;
             this.timespan = value;
             if (!this.widget) {
               this.storageService.setValue('miningWindowPreference', value);
@@ -83,7 +89,7 @@ export class PoolRankingComponent implements OnInit {
             return this.miningService.getMiningStats(this.miningWindowPreference);
           })
         ),
-        this.stateService.blocks$
+        this.stateService.chainTip$
           .pipe(
             switchMap(() => {
               return this.miningService.getMiningStats(this.miningWindowPreference);
@@ -92,7 +98,6 @@ export class PoolRankingComponent implements OnInit {
       )
       .pipe(
         map(data => {
-          data.pools = data.pools.map((pool: SinglePoolStats) => this.formatPoolUI(pool));
           data['minersLuck'] = (100 * (data.blockCount / 1008)).toFixed(2); // luck 1w
           return data;
         }),
@@ -102,11 +107,6 @@ export class PoolRankingComponent implements OnInit {
         }),
         share()
       );
-  }
-
-  formatPoolUI(pool: SinglePoolStats) {
-    pool['blockText'] = pool.blockCount.toString() + ` (${pool.share}%)`;
-    return pool;
   }
 
   generatePoolsChartSerieData(miningStats) {
@@ -162,10 +162,10 @@ export class PoolRankingComponent implements OnInit {
             if (this.miningWindowPreference === '24h') {
               return `<b style="color: white">${pool.name} (${pool.share}%)</b><br>` +
                 pool.lastEstimatedHashrate.toString() + ' PH/s' +
-                `<br>` + $localize`${i} blocks`;
+                `<br>` + $localize`${ i }:INTERPOLATION: blocks`;
             } else {
               return `<b style="color: white">${pool.name} (${pool.share}%)</b><br>` +
-                $localize`${i} blocks`;
+                $localize`${ i }:INTERPOLATION: blocks`;
             }
           }
         },
@@ -176,7 +176,7 @@ export class PoolRankingComponent implements OnInit {
     // 'Other'
     data.push({
       itemStyle: {
-        color: 'grey',
+        color: '#6b6b6b',
       },
       value: totalShareOther,
       name: 'Other' + (isMobile() ? `` : ` (${totalShareOther.toFixed(2)}%)`),
@@ -195,13 +195,15 @@ export class PoolRankingComponent implements OnInit {
         },
         borderColor: '#000',
         formatter: () => {
+          const percentage = totalShareOther.toFixed(2) + '%';
+          const i = totalBlockOther.toString();
           if (this.miningWindowPreference === '24h') {
-            return `<b style="color: white">${'Other'} (${totalShareOther.toFixed(2)}%)</b><br>` +
+            return `<b style="color: white">` + $localize`Other (${percentage})` + `</b><br>` +
               totalEstimatedHashrateOther.toString() + ' PH/s' +
-              `<br>` + totalBlockOther.toString() + ` blocks`;
+              `<br>` + $localize`${ i }:INTERPOLATION: blocks`;
           } else {
-            return `<b style="color: white">${'Other'} (${totalShareOther.toFixed(2)}%)</b><br>` +
-              totalBlockOther.toString() + ` blocks`;
+            return `<b style="color: white">` + $localize`Other (${percentage})` + `</b><br>` +
+              $localize`${ i }:INTERPOLATION: blocks`;
           }
         }
       },
@@ -219,7 +221,7 @@ export class PoolRankingComponent implements OnInit {
 
     this.chartOptions = {
       animation: false,
-      color: chartColors,
+      color: chartColors.filter(color => color !== '#FDD835'),
       tooltip: {
         trigger: 'item',
         textStyle: {

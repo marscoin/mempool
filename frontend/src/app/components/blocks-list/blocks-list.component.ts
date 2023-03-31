@@ -22,6 +22,7 @@ export class BlocksList implements OnInit, OnDestroy {
   latestScoreSubscription: Subscription;
 
   indexingAvailable = false;
+  auditAvailable = false;
   isLoading = true;
   loadingScores = true;
   fromBlockHeight = undefined;
@@ -44,6 +45,7 @@ export class BlocksList implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.indexingAvailable = (this.stateService.env.BASE_MODULE === 'mempool' &&
       this.stateService.env.MINING_DASHBOARD === true);
+    this.auditAvailable = this.indexingAvailable && this.stateService.env.AUDIT;
 
     if (!this.widget) {
       this.websocketService.want(['blocks']);
@@ -85,8 +87,8 @@ export class BlocksList implements OnInit, OnDestroy {
       this.stateService.blocks$
         .pipe(
           switchMap((block) => {
-            if (block[0].height < this.lastBlockHeight) {
-              return []; // Return an empty stream so the last pipe is not executed
+            if (block[0].height <= this.lastBlockHeight) {
+              return [null]; // Return an empty stream so the last pipe is not executed
             }
             this.lastBlockHeight = block[0].height;
             return [block];
@@ -99,19 +101,21 @@ export class BlocksList implements OnInit, OnDestroy {
             this.lastPage = this.page;
             return blocks[0];
           }
-          this.blocksCount = Math.max(this.blocksCount, blocks[1][0].height) + 1;
-          if (this.stateService.env.MINING_DASHBOARD) {
-            // @ts-ignore: Need to add an extra field for the template
-            blocks[1][0].extras.pool.logo = `/resources/mining-pools/` +
-              blocks[1][0].extras.pool.name.toLowerCase().replace(' ', '').replace('.', '') + '.svg';
+          if (blocks[1]) {
+            this.blocksCount = Math.max(this.blocksCount, blocks[1][0].height) + 1;
+            if (this.stateService.env.MINING_DASHBOARD) {
+              // @ts-ignore: Need to add an extra field for the template
+              blocks[1][0].extras.pool.logo = `/resources/mining-pools/` +
+                blocks[1][0].extras.pool.name.toLowerCase().replace(' ', '').replace('.', '') + '.svg';
+            }
+            acc.unshift(blocks[1][0]);
+            acc = acc.slice(0, this.widget ? 6 : 15);
           }
-          acc.unshift(blocks[1][0]);
-          acc = acc.slice(0, this.widget ? 6 : 15);
           return acc;
         }, [])
       );
 
-    if (this.indexingAvailable) {
+    if (this.indexingAvailable && this.auditAvailable) {
       this.auditScoreSubscription = this.fromHeightSubject.pipe(
         switchMap((fromBlockHeight) => {
           this.loadingScores = true;

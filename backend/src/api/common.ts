@@ -1,4 +1,4 @@
-import { CpfpInfo, TransactionExtended, TransactionStripped } from '../mempool.interfaces';
+import { Ancestor, CpfpInfo, CpfpSummary, EffectiveFeeStats, MempoolBlockWithTransactions, TransactionExtended, TransactionStripped } from '../mempool.interfaces';
 import config from '../config';
 import { NodeSocket } from '../repositories/NodesSocketsRepository';
 import { isIP } from 'net';
@@ -167,6 +167,30 @@ export class Common {
     return parents;
   }
 
+  // calculates the ratio of matched transactions to projected transactions by weight
+  static getSimilarity(projectedBlock: MempoolBlockWithTransactions, transactions: TransactionExtended[]): number {
+    let matchedWeight = 0;
+    let projectedWeight = 0;
+    const inBlock = {};
+
+    for (const tx of transactions) {
+      inBlock[tx.txid] = tx;
+    }
+
+    // look for transactions that were expected in the template, but missing from the mined block
+    for (const tx of projectedBlock.transactions) {
+      if (inBlock[tx.txid]) {
+        matchedWeight += tx.vsize * 4;
+      }
+      projectedWeight += tx.vsize * 4;
+    }
+
+    projectedWeight += transactions[0].weight;
+    matchedWeight += transactions[0].weight;
+
+    return projectedWeight ? matchedWeight / projectedWeight : 1;
+  }
+
   static getSqlInterval(interval: string | null): string | null {
     switch (interval) {
       case '24h': return '1 DAY';
@@ -178,6 +202,7 @@ export class Common {
       case '1y': return '1 YEAR';
       case '2y': return '2 YEAR';
       case '3y': return '3 YEAR';
+      case '4y': return '4 YEAR';
       default: return null;
     }
   }
@@ -240,14 +265,21 @@ export class Common {
     ].join('x');
   }
 
-  static utcDateToMysql(date?: number): string {
+  static utcDateToMysql(date?: number | null): string | null {
+    if (date === null) {
+      return null;
+    }
     const d = new Date((date || 0) * 1000);
     return d.toISOString().split('T')[0] + ' ' + d.toTimeString().split(' ')[0];
   }
 
   static findSocketNetwork(addr: string): {network: string | null, url: string} {
     let network: string | null = null;
-    let url = addr.split('://')[1];
+    let url: string = addr;
+
+    if (config.LIGHTNING.BACKEND === 'cln') {
+      url = addr.split('://')[1];
+    }
 
     if (!url) {
       return {
@@ -264,7 +296,7 @@ export class Common {
       }
     } else if (addr.indexOf('i2p') !== -1) {
       network = 'i2p';
-    } else if (addr.indexOf('ipv4') !== -1) {
+    } else if (addr.indexOf('ipv4') !== -1 || (config.LIGHTNING.BACKEND === 'lnd' && isIP(url.split(':')[0]) === 4)) {
       const ipv = isIP(url.split(':')[0]);
       if (ipv === 4) {
         network = 'ipv4';
@@ -274,7 +306,7 @@ export class Common {
           url: addr,
         };
       }
-    } else if (addr.indexOf('ipv6') !== -1) {
+    } else if (addr.indexOf('ipv6') !== -1 || (config.LIGHTNING.BACKEND === 'lnd' && url.indexOf(']:'))) {
       url = url.split('[')[1].split(']')[0];
       const ipv = isIP(url);
       if (ipv === 6) {
@@ -315,5 +347,100 @@ export class Common {
         addr: formatted.url,
       };
     }
+  }
+
+  static calculateCpfp(height: number, transactions: TransactionExtended[]): CpfpSummary {
+    const clusters: { root: string, height: number, txs: Ancestor[], effectiveFeePerVsize: number }[] = [];
+    let cluster: TransactionExtended[] = [];
+    let ancestors: { [txid: string]: boolean } = {};
+    const txMap = {};
+    for (let i = transactions.length - 1; i >= 0; i--) {
+      const tx = transactions[i];
+      txMap[tx.txid] = tx;
+      if (!ancestors[tx.txid]) {
+        let totalFee = 0;
+        let totalVSize = 0;
+        cluster.forEach(tx => {
+          totalFee += tx?.fee || 0;
+          totalVSize += (tx.weight / 4);
+        });
+        const effectiveFeePerVsize = totalFee / totalVSize;
+        if (cluster.length > 1) {
+          clusters.push({
+            root: cluster[0].txid,
+            height,
+            txs: cluster.map(tx => { return { txid: tx.txid, weight: tx.weight, fee: tx.fee || 0 }; }),
+            effectiveFeePerVsize,
+          });
+        }
+        cluster.forEach(tx => {
+          txMap[tx.txid].effectiveFeePerVsize = effectiveFeePerVsize;
+        });
+        cluster = [];
+        ancestors = {};
+      }
+      cluster.push(tx);
+      tx.vin.forEach(vin => {
+        ancestors[vin.txid] = true;
+      });
+    }
+    return {
+      transactions,
+      clusters,
+    };
+  }
+
+  static calcEffectiveFeeStatistics(transactions: { weight: number, fee: number, effectiveFeePerVsize?: number, txid: string }[]): EffectiveFeeStats {
+    const sortedTxs = transactions.map(tx => { return { txid: tx.txid, weight: tx.weight, rate: tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4)) }; }).sort((a, b) => a.rate - b.rate);
+
+    let weightCount = 0;
+    let medianFee = 0;
+    let medianWeight = 0;
+
+    // calculate the "medianFee" as the average fee rate of the middle 10000 weight units of transactions
+    const leftBound = 1995000;
+    const rightBound = 2005000;
+    for (let i = 0; i < sortedTxs.length && weightCount < rightBound; i++) {
+      const left = weightCount;
+      const right = weightCount + sortedTxs[i].weight;
+      if (right > leftBound) {
+        const weight = Math.min(right, rightBound) - Math.max(left, leftBound);
+        medianFee += (sortedTxs[i].rate * (weight / 4) );
+        medianWeight += weight;
+      }
+      weightCount += sortedTxs[i].weight;
+    }
+    const medianFeeRate = medianWeight ? (medianFee / (medianWeight / 4)) : 0;
+
+    // minimum effective fee heuristic:
+    // lowest of
+    // a) the 1st percentile of effective fee rates
+    // b) the minimum effective fee rate in the last 2% of transactions (in block order)
+    const minFee = Math.min(
+      Common.getNthPercentile(1, sortedTxs).rate,
+      transactions.slice(-transactions.length / 50).reduce((min, tx) => { return Math.min(min, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, Infinity)
+    );
+
+    // maximum effective fee heuristic:
+    // highest of
+    // a) the 99th percentile of effective fee rates
+    // b) the maximum effective fee rate in the first 2% of transactions (in block order)
+    const maxFee = Math.max(
+      Common.getNthPercentile(99, sortedTxs).rate,
+      transactions.slice(0, transactions.length / 50).reduce((max, tx) => { return Math.max(max, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, 0)
+    );
+
+    return {
+      medianFee: medianFeeRate,
+      feeRange: [
+        minFee,
+        [10,25,50,75,90].map(n => Common.getNthPercentile(n, sortedTxs).rate),
+        maxFee,
+      ].flat(),
+    };
+  }
+
+  static getNthPercentile(n: number, sortedDistribution: any[]): any {
+    return sortedDistribution[Math.floor((sortedDistribution.length - 1) * (n / 100))];
   }
 }

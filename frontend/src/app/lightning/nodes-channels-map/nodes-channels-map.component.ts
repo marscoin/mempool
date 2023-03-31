@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input, Output, EventEmitter, NgZone, OnInit } from '@angular/core';
 import { SeoService } from '../../services/seo.service';
 import { ApiService } from '../../services/api.service';
-import { Observable, switchMap, tap, zip } from 'rxjs';
+import { delay, Observable, switchMap, tap, zip } from 'rxjs';
 import { AssetsService } from '../../services/assets.service';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { RelativeUrlPipe } from '../../shared/pipes/relative-url/relative-url.pipe';
@@ -75,6 +75,7 @@ export class NodesChannelsMap implements OnInit {
     
     this.channelsObservable = this.activatedRoute.paramMap
      .pipe(
+       delay(100),
        switchMap((params: ParamMap) => {
         this.isLoading = true;
         if (this.style === 'channelpage' && this.channel.length === 0 || !this.hasLocation) {
@@ -203,24 +204,33 @@ export class NodesChannelsMap implements OnInit {
 
   prepareChartOptions(nodes, channels) {
     let title: object;
-    if (channels.length === 0 && !this.placeholder) {
-      this.chartOptions = null;
-      return;
-    }
-
-    // empty map fallback
-    if (channels.length === 0 && this.placeholder) {
-      title = {
-        textStyle: {
-          color: 'white',
-          fontSize: 18
-        },
-        text: $localize`No geolocation data available`,
-        left: 'center',
-        top: 'center'
-      };
-      this.zoom = 1.5;
-      this.center = [0, 20];
+    if (channels.length === 0) {
+      if (!this.placeholder) {
+        this.isLoading = false;
+        title = {
+          textStyle: {
+            color: 'white',
+            fontSize: 18
+          },
+          text: $localize`No data to display yet. Try again later.`,
+          left: 'center',
+          top: 'center'
+        };
+        this.zoom = 1.5;
+        this.center = [0, 20];
+      } else { // used for Node and Channel preview components
+        title = {
+          textStyle: {
+            color: 'white',
+            fontSize: 18
+          },
+          text: $localize`No geolocation data available`,
+          left: 'center',
+          top: 'center'
+        };
+        this.zoom = 1.5;
+        this.center = [0, 20];
+      }
     }
 
     this.chartOptions = {
@@ -228,6 +238,7 @@ export class NodesChannelsMap implements OnInit {
       title: title ?? undefined,
       tooltip: {},
       geo: {
+        top: 75,
         animation: false,
         silent: true,
         center: this.center,

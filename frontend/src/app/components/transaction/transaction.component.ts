@@ -8,10 +8,11 @@ import {
   retryWhen,
   delay,
   map,
-  mergeMap
+  mergeMap,
+  tap
 } from 'rxjs/operators';
 import { Transaction } from '../../interfaces/electrs.interface';
-import { of, merge, Subscription, Observable, Subject, timer, combineLatest, from, throwError } from 'rxjs';
+import { of, merge, Subscription, Observable, Subject, timer, from, throwError } from 'rxjs';
 import { StateService } from '../../services/state.service';
 import { CacheService } from '../../services/cache.service';
 import { WebsocketService } from '../../services/websocket.service';
@@ -21,6 +22,8 @@ import { SeoService } from '../../services/seo.service';
 import { BlockExtended, CpfpInfo } from '../../interfaces/node-api.interface';
 import { LiquidUnblinding } from './liquid-ublinding';
 import { RelativeUrlPipe } from '../../shared/pipes/relative-url/relative-url.pipe';
+import { Price, PriceService } from '../../services/price.service';
+import { isFeatureActive } from '../../bitcoin.utils';
 
 @Component({
   selector: 'app-transaction',
@@ -55,6 +58,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
   fetchCpfp$ = new Subject<string>();
   fetchRbfHistory$ = new Subject<string>();
   fetchCachedTx$ = new Subject<string>();
+  isCached: boolean = false;
   now = new Date().getTime();
   timeAvg$: Observable<number>;
   liquidUnblinding = new LiquidUnblinding();
@@ -69,8 +73,14 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
   hideFlow: boolean = this.stateService.hideFlow.value;
   overrideFlowPreference: boolean = null;
   flowEnabled: boolean;
-
+  blockConversion: Price;
   tooltipPosition: { x: number, y: number };
+  isMobile: boolean;
+
+  featuresEnabled: boolean;
+  segwitEnabled: boolean;
+  rbfEnabled: boolean;
+  taprootEnabled: boolean;
 
   @ViewChild('graphContainer')
   graphContainer: ElementRef;
@@ -85,7 +95,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
     private websocketService: WebsocketService,
     private audioService: AudioService,
     private apiService: ApiService,
-    private seoService: SeoService
+    private seoService: SeoService,
+    private priceService: PriceService,
   ) {}
 
   ngOnInit() {
@@ -193,6 +204,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       this.tx = tx;
+      this.setFeatures();
+      this.isCached = true;
       if (tx.fee === undefined) {
         this.tx.fee = 0;
       }
@@ -286,6 +299,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
           }
 
           this.tx = tx;
+          this.setFeatures();
+          this.isCached = false;
           if (tx.fee === undefined) {
             this.tx.fee = 0;
           }
@@ -323,6 +338,13 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
             }
             this.fetchRbfHistory$.next(this.tx.txid);
           }
+
+          this.priceService.getBlockPrice$(tx.status.block_time, true).pipe(
+            tap((price) => {
+              this.blockConversion = price;
+            })
+          ).subscribe();
+      
           setTimeout(() => { this.applyFragment(); }, 0);
         },
         (error) => {
@@ -334,7 +356,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
     this.blocksSubscription = this.stateService.blocks$.subscribe(([block, txConfirmed]) => {
       this.latestBlock = block;
 
-      if (txConfirmed && this.tx) {
+      if (txConfirmed && this.tx && !this.tx.status.confirmed) {
         this.tx.status = {
           confirmed: true,
           block_height: block.height,
@@ -352,7 +374,6 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
         this.waitingForTransaction = false;
       }
       this.rbfTransaction = rbfTransaction;
-      this.cacheService.setTxCache([this.rbfTransaction]);
       this.replaced = true;
       if (rbfTransaction && !this.tx) {
         this.fetchCachedTx$.next(this.txId);
@@ -416,9 +437,23 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       });
   }
 
+  setFeatures(): void {
+    if (this.tx) {
+      this.segwitEnabled = !this.tx.status.confirmed || isFeatureActive(this.stateService.network, this.tx.status.block_height, 'segwit');
+      this.taprootEnabled = !this.tx.status.confirmed || isFeatureActive(this.stateService.network, this.tx.status.block_height, 'taproot');
+      this.rbfEnabled = !this.tx.status.confirmed || isFeatureActive(this.stateService.network, this.tx.status.block_height, 'rbf');
+    } else {
+      this.segwitEnabled = false;
+      this.taprootEnabled = false;
+      this.rbfEnabled = false;
+    }
+    this.featuresEnabled = this.segwitEnabled || this.taprootEnabled || this.rbfEnabled;
+  }
+
   resetTransaction() {
     this.error = undefined;
     this.tx = null;
+    this.setFeatures();
     this.waitingForTransaction = false;
     this.isLoadingTx = true;
     this.rbfTransaction = undefined;
@@ -483,8 +518,11 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
 
   @HostListener('window:resize', ['$event'])
   setGraphSize(): void {
+    this.isMobile = window.innerWidth < 850;
     if (this.graphContainer) {
-      this.graphWidth = this.graphContainer.nativeElement.clientWidth;
+      setTimeout(() => {
+        this.graphWidth = this.graphContainer.nativeElement.clientWidth;
+      }, 1);
     }
   }
 

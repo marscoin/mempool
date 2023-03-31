@@ -19,7 +19,6 @@ interface IConfig {
     MEMPOOL_BLOCKS_AMOUNT: number;
     INDEXING_BLOCKS_AMOUNT: number;
     BLOCKS_SUMMARIES_INDEXING: boolean;
-    PRICE_FEED_UPDATE_INTERVAL: number;
     USE_SECOND_NODE_FOR_MINFEE: boolean;
     EXTERNAL_ASSETS: string[];
     EXTERNAL_MAX_RETRY: number;
@@ -29,9 +28,12 @@ interface IConfig {
     AUTOMATIC_BLOCK_REINDEXING: boolean;
     POOLS_JSON_URL: string,
     POOLS_JSON_TREE_URL: string,
+    AUDIT: boolean;
     ADVANCED_GBT_AUDIT: boolean;
     ADVANCED_GBT_MEMPOOL: boolean;
     CPFP_INDEXING: boolean;
+    MAX_BLOCKS_BULK_QUERY: number;
+    DISK_CACHE_BLOCK_INTERVAL: number;
   };
   ESPLORA: {
     REST_API_URL: string;
@@ -50,6 +52,7 @@ interface IConfig {
     TLS_CERT_PATH: string;
     MACAROON_PATH: string;
     REST_API_URL: string;
+    TIMEOUT: number;
   };
   CLIGHTNING: {
     SOCKET: string;
@@ -64,12 +67,14 @@ interface IConfig {
     PORT: number;
     USERNAME: string;
     PASSWORD: string;
+    TIMEOUT: number;
   };
   SECOND_CORE_RPC: {
     HOST: string;
     PORT: number;
     USERNAME: string;
     PASSWORD: string;
+    TIMEOUT: number;
   };
   DATABASE: {
     ENABLED: boolean;
@@ -140,7 +145,6 @@ const defaults: IConfig = {
     'MEMPOOL_BLOCKS_AMOUNT': 8,
     'INDEXING_BLOCKS_AMOUNT': 11000, // 0 = disable indexing, -1 = index all blocks
     'BLOCKS_SUMMARIES_INDEXING': false,
-    'PRICE_FEED_UPDATE_INTERVAL': 600,
     'USE_SECOND_NODE_FOR_MINFEE': false,
     'EXTERNAL_ASSETS': [],
     'EXTERNAL_MAX_RETRY': 1,
@@ -148,11 +152,14 @@ const defaults: IConfig = {
     'USER_AGENT': 'mempool',
     'STDOUT_LOG_MIN_PRIORITY': 'debug',
     'AUTOMATIC_BLOCK_REINDEXING': false,
-    'POOLS_JSON_URL': 'https://raw.githubusercontent.com/mempool/mining-pools/master/pools.json',
+    'POOLS_JSON_URL': 'https://raw.githubusercontent.com/mempool/mining-pools/master/pools-v2.json',
     'POOLS_JSON_TREE_URL': 'https://api.github.com/repos/mempool/mining-pools/git/trees/master',
+    'AUDIT': false,
     'ADVANCED_GBT_AUDIT': false,
     'ADVANCED_GBT_MEMPOOL': false,
     'CPFP_INDEXING': false,
+    'MAX_BLOCKS_BULK_QUERY': 0,
+    'DISK_CACHE_BLOCK_INTERVAL': 6,
   },
   'ESPLORA': {
     'REST_API_URL': 'http://127.0.0.1:3000',
@@ -166,13 +173,15 @@ const defaults: IConfig = {
     'HOST': '127.0.0.1',
     'PORT': 8332,
     'USERNAME': 'mempool',
-    'PASSWORD': 'mempool'
+    'PASSWORD': 'mempool',
+    'TIMEOUT': 60000,
   },
   'SECOND_CORE_RPC': {
     'HOST': '127.0.0.1',
     'PORT': 8332,
     'USERNAME': 'mempool',
-    'PASSWORD': 'mempool'
+    'PASSWORD': 'mempool',
+    'TIMEOUT': 60000,
   },
   'DATABASE': {
     'ENABLED': true,
@@ -212,6 +221,7 @@ const defaults: IConfig = {
     'TLS_CERT_PATH': '',
     'MACAROON_PATH': '',
     'REST_API_URL': 'https://localhost:8080',
+    'TIMEOUT': 10000,
   },
   'CLIGHTNING': {
     'SOCKET': '',

@@ -1,6 +1,6 @@
 {
   "name": "mempool-frontend",
-  "version": "2.5.0-dev",
+  "version": "2.6.0-dev",
   "description": "Bitcoin mempool visualizer and blockchain explorer backend",
   "license": "GNU Affero General Public License v3.0",
   "homepage": "https://mempool.space",
@@ -110,7 +110,7 @@
   },
   "optionalDependencies": {
     "@cypress/schematic": "^2.4.0",
-    "cypress": "^12.3.0",
+    "cypress": "^12.7.0",
     "cypress-fail-on-console-error": "~4.0.2",
     "cypress-wait-until": "^1.7.2",
     "mock-socket": "~9.1.5",

@@ -11,6 +11,12 @@
     line-height: 32px;
   }
 
+  .image.not-rounded {
+    border-radius: 0;
+    width: 60px;
+    height: 60px;
+  }
+
   .intro {
     margin: 25px auto 30px;
     width: 250px;
@@ -34,6 +40,15 @@
     padding: 10px 15px 15px;
   }
 
+  video {
+    width: 640px;
+    max-width: 90%;
+    margin-top: 0;
+    @media (min-width: 768px) {
+      height: 360px;
+    }
+  }
+
   .social-icons {
     a {
       margin: auto 10px;
@@ -44,8 +59,13 @@
   .enterprise-sponsor,
   .community-integrations-sponsor,
   .maintainers {
-    margin-top: 68px;
+    margin-top: 30px;
     margin-bottom: 68px;
+    scroll-margin: 30px;
+
+    @media (min-width: 768px) {
+      margin-top: 68px;
+    }
   }
 
   .maintainers {
@@ -68,8 +88,8 @@
 
   .community-sponsor {
     img {
-      width: 67px;
-      height: 67px;
+      width: 57px;
+      height: 57px;
     }
   }
 
@@ -117,6 +137,7 @@
   .project-translators,
   .community-integrations-sponsor,
   .maintainers {
+    scroll-margin: 30px;
     .wrapper {
       display: inline-block;
       a {
@@ -142,6 +163,13 @@
     margin: 10px auto 20px;
     a img {
       margin: 6px;
+    }
+  }
+
+  .project-translators .wrapper {
+    a img {
+      width: 72px;
+      height: 72px;
     }
   }
 
@@ -179,6 +207,21 @@
         margin: 20px auto 30px;
       }
     }
+    .social-icons {
+      a {
+        margin: 45px 10px;
+      }
+      .bitcointv svg {
+        width: 36px;
+        height: auto;
+        vertical-align: bottom;
+        margin-bottom: 2px;
+        margin-left: 5px;
+      }
+      .bitcointv svg:hover {
+        opacity: 0.75;
+      }
+    }
   }
 
   .footer-version {
@@ -191,6 +234,11 @@
 }
 
 .community-integrations-sponsor {
-  max-width: 965px;
+  max-width: 1110px;
   margin: auto;
+}
+
+.community-integrations-sponsor img.image {
+  width: 64px;
+  height: 64px;
 }

@@ -11,12 +11,14 @@ import DifficultyAdjustmentsRepository from '../../repositories/DifficultyAdjust
 import config from '../../config';
 import BlocksAuditsRepository from '../../repositories/BlocksAuditsRepository';
 import PricesRepository from '../../repositories/PricesRepository';
+import { bitcoinCoreApi } from '../bitcoin/bitcoin-api-factory';
+import { IEsploraApi } from '../bitcoin/esplora-api.interface';
+import database from '../../database';
 
 class Mining {
-  blocksPriceIndexingRunning = false;
-
-  constructor() {
-  }
+  private blocksPriceIndexingRunning = false;
+  public lastHashrateIndexingDate: number | null = null;
+  public lastWeeklyHashrateIndexingDate: number | null = null;
 
   /**
    * Get historical block predictions match rate
@@ -100,6 +102,7 @@ class Mining {
         rank: rank++,
         emptyBlocks: emptyBlocksCount.length > 0 ? emptyBlocksCount[0]['count'] : 0,
         slug: poolInfo.slug,
+        avgMatchRate: poolInfo.avgMatchRate !== null ? Math.round(100 * poolInfo.avgMatchRate) / 100 : null,
       };
       poolsStats.push(poolStat);
     });
@@ -115,7 +118,7 @@ class Mining {
       poolsStatistics['lastEstimatedHashrate'] = await bitcoinClient.getNetworkHashPs(totalBlock24h);
     } catch (e) {
       poolsStatistics['lastEstimatedHashrate'] = 0;
-      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate');
+      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate', logger.tags.mining);
     }
 
     return poolsStatistics;
@@ -139,11 +142,14 @@ class Mining {
     const blockCount1w: number = await BlocksRepository.$blockCount(pool.id, '1w');
     const totalBlock1w: number = await BlocksRepository.$blockCount(null, '1w');
 
+    const avgHealth = await BlocksRepository.$getAvgBlockHealthPerPoolId(pool.id);    
+    const totalReward = await BlocksRepository.$getTotalRewardForPoolId(pool.id);    
+
     let currentEstimatedHashrate = 0;
     try {
       currentEstimatedHashrate = await bitcoinClient.getNetworkHashPs(totalBlock24h);
     } catch (e) {
-      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate');
+      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate', logger.tags.mining);
     }
 
     return {
@@ -160,6 +166,8 @@ class Mining {
       },
       estimatedHashrate: currentEstimatedHashrate * (blockCount24h / totalBlock24h),
       reportedHashrate: null,
+      avgBlockHealth: avgHealth,
+      totalReward: totalReward,
     };
   }
 
@@ -171,25 +179,26 @@ class Mining {
   }
 
   /**
-   * [INDEXING] Generate weekly mining pool hashrate history
+   * Generate weekly mining pool hashrate history
    */
   public async $generatePoolHashrateHistory(): Promise<void> {
     const now = new Date();
-    const lastestRunDate = await HashratesRepository.$getLatestRun('last_weekly_hashrates_indexing');
 
     // Run only if:
-    // * lastestRunDate is set to 0 (node backend restart, reorg)
+    // * this.lastWeeklyHashrateIndexingDate is set to null (node backend restart, reorg)
     // * we started a new week (around Monday midnight)
-    const runIndexing = lastestRunDate === 0 || now.getUTCDay() === 1 && lastestRunDate !== now.getUTCDate();
+    const runIndexing = this.lastWeeklyHashrateIndexingDate === null ||
+      now.getUTCDay() === 1 && this.lastWeeklyHashrateIndexingDate !== now.getUTCDate();
     if (!runIndexing) {
+      logger.debug(`Pool hashrate history indexing is up to date, nothing to do`, logger.tags.mining);
       return;
     }
 
     try {
       const oldestConsecutiveBlockTimestamp = 1000 * (await BlocksRepository.$getOldestConsecutiveBlock()).timestamp;
 
-      const genesisBlock = await bitcoinClient.getBlock(await bitcoinClient.getBlockHash(0));
-      const genesisTimestamp = genesisBlock.time * 1000;
+      const genesisBlock: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(await bitcoinClient.getBlockHash(0));
+      const genesisTimestamp = genesisBlock.timestamp * 1000;
 
       const indexedTimestamp = await HashratesRepository.$getWeeklyHashrateTimestamps();
       const hashrates: any[] = [];
@@ -205,7 +214,7 @@ class Mining {
       const startedAt = new Date().getTime() / 1000;
       let timer = new Date().getTime() / 1000;
 
-      logger.debug(`Indexing weekly mining pool hashrate`);
+      logger.debug(`Indexing weekly mining pool hashrate`, logger.tags.mining);
       loadingIndicators.setProgress('weekly-hashrate-indexing', 0);
 
       while (toTimestamp > genesisTimestamp && toTimestamp > oldestConsecutiveBlockTimestamp) {
@@ -242,7 +251,7 @@ class Mining {
             });
           }
 
-          newlyIndexed += hashrates.length;
+          newlyIndexed += hashrates.length / Math.max(1, pools.length);
           await HashratesRepository.$saveHashrates(hashrates);
           hashrates.length = 0;
         }
@@ -253,7 +262,7 @@ class Mining {
           const weeksPerSeconds = Math.max(1, Math.round(indexedThisRun / elapsedSeconds));
           const progress = Math.round(totalIndexed / totalWeekIndexed * 10000) / 100;
           const formattedDate = new Date(fromTimestamp).toUTCString();
-          logger.debug(`Getting weekly pool hashrate for ${formattedDate} | ~${weeksPerSeconds.toFixed(2)} weeks/sec | total: ~${totalIndexed}/${Math.round(totalWeekIndexed)} (${progress}%) | elapsed: ${runningFor} seconds`);
+          logger.debug(`Getting weekly pool hashrate for ${formattedDate} | ~${weeksPerSeconds.toFixed(2)} weeks/sec | total: ~${totalIndexed}/${Math.round(totalWeekIndexed)} (${progress}%) | elapsed: ${runningFor} seconds`, logger.tags.mining);
           timer = new Date().getTime() / 1000;
           indexedThisRun = 0;
           loadingIndicators.setProgress('weekly-hashrate-indexing', progress, false);
@@ -263,36 +272,36 @@ class Mining {
         ++indexedThisRun;
         ++totalIndexed;
       }
-      await HashratesRepository.$setLatestRun('last_weekly_hashrates_indexing', new Date().getUTCDate());
+      this.lastWeeklyHashrateIndexingDate = new Date().getUTCDate();
       if (newlyIndexed > 0) {
-        logger.notice(`Weekly mining pools hashrates indexing completed: indexed ${newlyIndexed}`, logger.tags.mining);
+        logger.info(`Weekly mining pools hashrates indexing completed: indexed ${newlyIndexed} weeks`, logger.tags.mining);
       } else {
-        logger.debug(`Weekly mining pools hashrates indexing completed: indexed ${newlyIndexed}`, logger.tags.mining);
+        logger.debug(`Weekly mining pools hashrates indexing completed: indexed ${newlyIndexed} weeks`, logger.tags.mining);
       }
       loadingIndicators.setProgress('weekly-hashrate-indexing', 100);
     } catch (e) {
       loadingIndicators.setProgress('weekly-hashrate-indexing', 100);
-      logger.err(`Weekly mining pools hashrates indexing failed. Trying again in 10 seconds. Reason: ${(e instanceof Error ? e.message : e)}`);
+      logger.err(`Weekly mining pools hashrates indexing failed. Trying again in 10 seconds. Reason: ${(e instanceof Error ? e.message : e)}`, logger.tags.mining);
       throw e;
     }
   }
 
   /**
-   * [INDEXING] Generate daily hashrate data
+   * Generate daily hashrate data
    */
   public async $generateNetworkHashrateHistory(): Promise<void> {
     // We only run this once a day around midnight
-    const latestRunDate = await HashratesRepository.$getLatestRun('last_hashrates_indexing');
-    const now = new Date().getUTCDate();
-    if (now === latestRunDate) {
+    const today = new Date().getUTCDate();
+    if (today === this.lastHashrateIndexingDate) {
+      logger.debug(`Network hashrate history indexing is up to date, nothing to do`, logger.tags.mining);
       return;
     }
 
     const oldestConsecutiveBlockTimestamp = 1000 * (await BlocksRepository.$getOldestConsecutiveBlock()).timestamp;
 
     try {
-      const genesisBlock = await bitcoinClient.getBlock(await bitcoinClient.getBlockHash(0));
-      const genesisTimestamp = genesisBlock.time * 1000;
+      const genesisBlock: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(await bitcoinClient.getBlockHash(0));
+      const genesisTimestamp = genesisBlock.timestamp * 1000;
       const indexedTimestamp = (await HashratesRepository.$getRawNetworkDailyHashrate(null)).map(hashrate => hashrate.timestamp);
       const lastMidnight = this.getDateMidnight(new Date());
       let toTimestamp = Math.round(lastMidnight.getTime());
@@ -305,7 +314,7 @@ class Mining {
       const startedAt = new Date().getTime() / 1000;
       let timer = new Date().getTime() / 1000;
 
-      logger.debug(`Indexing daily network hashrate`);
+      logger.debug(`Indexing daily network hashrate`, logger.tags.mining);
       loadingIndicators.setProgress('daily-hashrate-indexing', 0);
 
       while (toTimestamp > genesisTimestamp && toTimestamp > oldestConsecutiveBlockTimestamp) {
@@ -343,7 +352,7 @@ class Mining {
           const daysPerSeconds = Math.max(1, Math.round(indexedThisRun / elapsedSeconds));
           const progress = Math.round(totalIndexed / totalDayIndexed * 10000) / 100;
           const formattedDate = new Date(fromTimestamp).toUTCString();
-          logger.debug(`Getting network daily hashrate for ${formattedDate} | ~${daysPerSeconds.toFixed(2)} days/sec | total: ~${totalIndexed}/${Math.round(totalDayIndexed)} (${progress}%) | elapsed: ${runningFor} seconds`);
+          logger.debug(`Getting network daily hashrate for ${formattedDate} | ~${daysPerSeconds.toFixed(2)} days/sec | total: ~${totalIndexed}/${Math.round(totalDayIndexed)} (${progress}%) | elapsed: ${runningFor} seconds`, logger.tags.mining);
           timer = new Date().getTime() / 1000;
           indexedThisRun = 0;
           loadingIndicators.setProgress('daily-hashrate-indexing', progress);
@@ -368,16 +377,16 @@ class Mining {
       newlyIndexed += hashrates.length;
       await HashratesRepository.$saveHashrates(hashrates);
 
-      await HashratesRepository.$setLatestRun('last_hashrates_indexing', new Date().getUTCDate());
+      this.lastHashrateIndexingDate = new Date().getUTCDate();
       if (newlyIndexed > 0) {
-        logger.notice(`Daily network hashrate indexing completed: indexed ${newlyIndexed} days`, logger.tags.mining);
+        logger.info(`Daily network hashrate indexing completed: indexed ${newlyIndexed} days`, logger.tags.mining);
       } else {
         logger.debug(`Daily network hashrate indexing completed: indexed ${newlyIndexed} days`, logger.tags.mining);
       }
       loadingIndicators.setProgress('daily-hashrate-indexing', 100);
     } catch (e) {
       loadingIndicators.setProgress('daily-hashrate-indexing', 100);
-      logger.err(`Daily network hashrate indexing failed. Trying again in 10 seconds. Reason: ${(e instanceof Error ? e.message : e)}`, logger.tags.mining);
+      logger.err(`Daily network hashrate indexing failed. Trying again later. Reason: ${(e instanceof Error ? e.message : e)}`, logger.tags.mining);
       throw e;
     }
   }
@@ -393,13 +402,13 @@ class Mining {
     }
 
     const blocks: any = await BlocksRepository.$getBlocksDifficulty();
-    const genesisBlock = await bitcoinClient.getBlock(await bitcoinClient.getBlockHash(0));
+    const genesisBlock: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(await bitcoinClient.getBlockHash(0));
     let currentDifficulty = genesisBlock.difficulty;
     let totalIndexed = 0;
 
     if (config.MEMPOOL.INDEXING_BLOCKS_AMOUNT === -1 && indexedHeights[0] !== true) {
       await DifficultyAdjustmentsRepository.$saveAdjustments({
-        time: genesisBlock.time,
+        time: genesisBlock.timestamp,
         height: 0,
         difficulty: currentDifficulty,
         adjustment: 0.0,
@@ -443,13 +452,13 @@ class Mining {
       const elapsedSeconds = Math.max(1, Math.round((new Date().getTime() / 1000) - timer));
       if (elapsedSeconds > 5) {
         const progress = Math.round(totalBlockChecked / blocks.length * 100);
-        logger.info(`Indexing difficulty adjustment at block #${block.height} | Progress: ${progress}%`);
+        logger.info(`Indexing difficulty adjustment at block #${block.height} | Progress: ${progress}%`, logger.tags.mining);
         timer = new Date().getTime() / 1000;
       }
     }
 
     if (totalIndexed > 0) {
-      logger.notice(`Indexed ${totalIndexed} difficulty adjustments`, logger.tags.mining);
+      logger.info(`Indexed ${totalIndexed} difficulty adjustments`, logger.tags.mining);
     } else {
       logger.debug(`Indexed ${totalIndexed} difficulty adjustments`, logger.tags.mining);
     }
@@ -458,7 +467,7 @@ class Mining {
   /**
    * Create a link between blocks and the latest price at when they were mined
    */
-  public async $indexBlockPrices() {
+  public async $indexBlockPrices(): Promise<void> {
     if (this.blocksPriceIndexingRunning === true) {
       return;
     }
@@ -496,7 +505,7 @@ class Mining {
           if (blocksWithoutPrices.length > 200000) {
             logStr += ` | Progress ${Math.round(totalInserted / blocksWithoutPrices.length * 100)}%`;
           }
-          logger.debug(logStr);
+          logger.debug(logStr, logger.tags.mining);
           await BlocksRepository.$saveBlockPrices(blocksPrices);
           blocksPrices.length = 0;
         }
@@ -508,7 +517,7 @@ class Mining {
         if (blocksWithoutPrices.length > 200000) {
           logStr += ` | Progress ${Math.round(totalInserted / blocksWithoutPrices.length * 100)}%`;
         }
-        logger.debug(logStr);
+        logger.debug(logStr, logger.tags.mining);
         await BlocksRepository.$saveBlockPrices(blocksPrices);
       }
     } catch (e) {
@@ -517,6 +526,41 @@ class Mining {
     }
 
     this.blocksPriceIndexingRunning = false;
+  }
+
+  /**
+   * Index core coinstatsindex
+   */
+  public async $indexCoinStatsIndex(): Promise<void> {
+    let timer = new Date().getTime() / 1000;
+    let totalIndexed = 0;
+
+    const blockchainInfo = await bitcoinClient.getBlockchainInfo();
+    let currentBlockHeight = blockchainInfo.blocks;
+
+    while (currentBlockHeight > 0) {
+      const indexedBlocks = await BlocksRepository.$getBlocksMissingCoinStatsIndex(
+        currentBlockHeight, currentBlockHeight - 10000);
+        
+      for (const block of indexedBlocks) {
+        const txoutset = await bitcoinClient.getTxoutSetinfo('none', block.height);
+        await BlocksRepository.$updateCoinStatsIndexData(block.hash, txoutset.txouts,
+          Math.round(txoutset.block_info.prevout_spent * 100000000));        
+        ++totalIndexed;
+
+        const elapsedSeconds = Math.max(1, new Date().getTime() / 1000 - timer);
+        if (elapsedSeconds > 5) {
+          logger.info(`Indexing coinstatsindex data for block #${block.height}. Indexed ${totalIndexed} blocks.`, logger.tags.mining);
+          timer = new Date().getTime() / 1000;
+        }
+      }
+
+      currentBlockHeight -= 10000;
+    }
+
+    if (totalIndexed) {
+      logger.info(`Indexing missing coinstatsindex data completed`, logger.tags.mining);
+    }
   }
 
   private getDateMidnight(date: Date): Date {
@@ -530,6 +574,7 @@ class Mining {
 
   private getTimeRange(interval: string | null, scale = 1): number {
     switch (interval) {
+      case '4y': return 43200 * scale; // 12h
       case '3y': return 43200 * scale; // 12h
       case '2y': return 28800 * scale; // 8h
       case '1y': return 28800 * scale; // 8h

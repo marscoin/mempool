@@ -160,7 +160,7 @@ npm install -g ts-node nodemon
 Then, run the watcher:
 
 ```
-nodemon src/index.ts --ignore cache/ --ignore pools.json
+nodemon src/index.ts --ignore cache/
 ```
 
 `nodemon` should be in npm's global binary folder. If needed, you can determine where that is with `npm -g bin`.
@@ -171,50 +171,84 @@ Helpful link: https://gist.github.com/System-Glitch/cb4e87bf1ae3fec9925725bb3ebe
 
 Run bitcoind on regtest:
    ```
-   bitcoind -regtest -rpcport=8332
+   bitcoind -regtest
    ```
 
 Create a new wallet, if needed:
    ```
-   bitcoin-cli -regtest -rpcport=8332 createwallet test
+   bitcoin-cli -regtest createwallet test
    ```
 
 Load wallet (this command may take a while if you have lot of UTXOs):
    ```
-   bitcoin-cli -regtest -rpcport=8332 loadwallet test
+   bitcoin-cli -regtest loadwallet test
    ```
 
 Get a new address:
    ```
-   address=$(./src/bitcoin-cli -regtest -rpcport=8332 getnewaddress)
+   address=$(bitcoin-cli -regtest getnewaddress)
    ```
 
 Mine blocks to the previously generated address. You need at least 101 blocks before you can spend. This will take some time to execute (~1 min):
    ```
-   bitcoin-cli -regtest -rpcport=8332 generatetoaddress 101 $address
+   bitcoin-cli -regtest generatetoaddress 101 $address
    ```
 
 Send 0.1 BTC at 5 sat/vB to another address:
    ```
-   ./src/bitcoin-cli -named -regtest -rpcport=8332 sendtoaddress address=$(./src/bitcoin-cli -regtest -rpcport=8332 getnewaddress) amount=0.1 fee_rate=5
+   bitcoin-cli -named -regtest sendtoaddress address=$(bitcoin-cli -regtest getnewaddress) amount=0.1 fee_rate=5
    ```
 
 See more example of `sendtoaddress`:
    ```
-   ./src/bitcoin-cli sendtoaddress # will print the help
+   bitcoin-cli sendtoaddress # will print the help
    ```
 
-Mini script to generate transactions with random TX fee-rate (between 1 to 100 sat/vB). It's slow so don't expect to use this to test mempool spam, except if you let it run for a long time, or maybe with multiple regtest nodes connected to each other.
+Mini script to generate random network activity (random TX count with random tx fee-rate). It's slow so don't expect to use this to test mempool spam, except if you let it run for a long time, or maybe with multiple regtest nodes connected to each other.
    ```
    #!/bin/bash
-   address=$(./src/bitcoin-cli -regtest -rpcport=8332 getnewaddress)
+   address=$(bitcoin-cli -regtest getnewaddress)
+   bitcoin-cli -regtest generatetoaddress 101 $address
    for i in {1..1000000}
    do
-     ./src/bitcoin-cli -regtest -rpcport=8332 -named sendtoaddress address=$address amount=0.01 fee_rate=$(jot -r 1  1 100)
+      for y in $(seq 1 "$(jot -r 1 1 1000)")
+      do
+         bitcoin-cli -regtest -named sendtoaddress address=$address amount=0.01 fee_rate=$(jot -r 1 1 100)
+      done
+      bitcoin-cli -regtest generatetoaddress 1 $address
+      sleep 5
    done
    ```
 
 Generate block at regular interval (every 10 seconds in this example):
    ```
-   watch -n 10 "./src/bitcoin-cli -regtest -rpcport=8332 generatetoaddress 1 $address"
+   watch -n 10 "bitcoin-cli -regtest generatetoaddress 1 $address"
    ```
+
+### Mining pools update
+
+By default, mining pools will be not automatically updated regularly (`config.MEMPOOL.AUTOMATIC_BLOCK_REINDEXING` is set to `false`). 
+
+To manually update your mining pools, you can use the `--update-pools` command line flag when you run the nodejs backend. For example `npm run start --update-pools`. This will trigger the mining pools update and automatically re-index appropriate blocks.
+
+You can enabled the automatic mining pools update by settings `config.MEMPOOL.AUTOMATIC_BLOCK_REINDEXING` to `true` in your `mempool-config.json`.
+
+When a `coinbase tag` or `coinbase address` change is detected, all blocks tagged to the `unknown` mining pools (starting from height 130635) will be deleted from the `blocks` table. Additionaly, all blocks which were tagged to the pool which has been updated will also be deleted from the `blocks` table. Of course, those blocks will be automatically reindexed.
+
+### Re-index tables
+
+You can manually force the nodejs backend to drop all data from a specified set of tables for future re-index. This is mostly useful for the mining dashboard and the lightning explorer.
+
+Use the `--reindex` command to specify a list of comma separated table which will be truncated at start. Note that a 5 seconds delay will be observed before truncating tables in order to give you a chance to cancel (CTRL+C) in case of misuse of the command.
+
+Usage:
+```
+npm run start --reindex=blocks,hashrates
+```
+Example output:
+```
+Feb 13 14:55:27 [63246] WARN: <lightning> Indexed data for "hashrates" tables will be erased in 5 seconds (using '--reindex')
+Feb 13 14:55:32 [63246] NOTICE: <lightning> Table hashrates has been truncated
+```
+
+Reference: https://github.com/mempool/mempool/pull/1269

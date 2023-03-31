@@ -1,14 +1,13 @@
 import logger from '../logger';
 import * as WebSocket from 'ws';
 import {
-  BlockExtended, TransactionExtended, WebsocketResponse, MempoolBlock, MempoolBlockDelta,
-  OptimizedStatistic, ILoadingIndicators, IConversionRates
+  BlockExtended, TransactionExtended, WebsocketResponse,
+  OptimizedStatistic, ILoadingIndicators
 } from '../mempool.interfaces';
 import blocks from './blocks';
 import memPool from './mempool';
 import backendInfo from './backend-info';
 import mempoolBlocks from './mempool-blocks';
-import fiatConversion from './fiat-conversion';
 import { Common } from './common';
 import loadingIndicators from './loading-indicators';
 import config from '../config';
@@ -19,6 +18,9 @@ import feeApi from './fee-api';
 import BlocksAuditsRepository from '../repositories/BlocksAuditsRepository';
 import BlocksSummariesRepository from '../repositories/BlocksSummariesRepository';
 import Audit from './audit';
+import { deepClone } from '../utils/clone';
+import priceUpdater from '../tasks/price-updater';
+import { ApiPrice } from '../repositories/PricesRepository';
 
 class WebsocketHandler {
   private wss: WebSocket.Server | undefined;
@@ -192,7 +194,7 @@ class WebsocketHandler {
     });
   }
 
-  handleNewConversionRates(conversionRates: IConversionRates) {
+  handleNewConversionRates(conversionRates: ApiPrice) {
     if (!this.wss) {
       throw new Error('WebSocket.Server is not set');
     }
@@ -209,16 +211,17 @@ class WebsocketHandler {
     if (!_blocks) {
       _blocks = blocks.getBlocks().slice(-config.MEMPOOL.INITIAL_BLOCKS_AMOUNT);
     }
+    const da = difficultyAdjustment.getDifficultyAdjustment();
     return {
       'mempoolInfo': memPool.getMempoolInfo(),
       'vBytesPerSecond': memPool.getVBytesPerSecond(),
       'blocks': _blocks,
-      'conversions': fiatConversion.getConversionRates(),
+      'conversions': priceUpdater.getLatestPrices(),
       'mempool-blocks': mempoolBlocks.getMempoolBlocks(),
       'transactions': memPool.getLatestTransactions(),
       'backendInfo': backendInfo.getBackendInfo(),
       'loadingIndicators': loadingIndicators.getLoadingIndicators(),
-      'da': difficultyAdjustment.getDifficultyAdjustment(),
+      'da': da?.previousTime ? da : undefined,
       'fees': feeApi.getRecommendedFee(),
       ...this.extraInitProperties
     };
@@ -251,9 +254,9 @@ class WebsocketHandler {
     }
 
     if (config.MEMPOOL.ADVANCED_GBT_MEMPOOL) {
-      await mempoolBlocks.updateBlockTemplates(newMempool, newTransactions, deletedTransactions.map(tx => tx.txid));
+      await mempoolBlocks.updateBlockTemplates(newMempool, newTransactions, deletedTransactions.map(tx => tx.txid), true);
     } else {
-      mempoolBlocks.updateMempoolBlocks(newMempool);
+      mempoolBlocks.updateMempoolBlocks(newMempool, true);
     }
 
     const mBlocks = mempoolBlocks.getMempoolBlocks();
@@ -276,7 +279,9 @@ class WebsocketHandler {
         response['mempoolInfo'] = mempoolInfo;
         response['vBytesPerSecond'] = vBytesPerSecond;
         response['transactions'] = newTransactions.slice(0, 6).map((tx) => Common.stripTransaction(tx));
-        response['da'] = da;
+        if (da?.previousTime) {
+          response['da'] = da;
+        }
         response['fees'] = recommendedFees;
       }
 
@@ -418,47 +423,57 @@ class WebsocketHandler {
 
     const _memPool = memPool.getMempool();
 
-    if (config.MEMPOOL.ADVANCED_GBT_AUDIT) {
-      await mempoolBlocks.makeBlockTemplates(_memPool);
-    } else {
-      mempoolBlocks.updateMempoolBlocks(_memPool);
-    }
+    if (config.MEMPOOL.AUDIT) {
+      let projectedBlocks;
+      // template calculation functions have mempool side effects, so calculate audits using
+      // a cloned copy of the mempool if we're running a different algorithm for mempool updates
+      const auditMempool = (config.MEMPOOL.ADVANCED_GBT_AUDIT === config.MEMPOOL.ADVANCED_GBT_MEMPOOL) ? _memPool : deepClone(_memPool);
+      if (config.MEMPOOL.ADVANCED_GBT_AUDIT) {
+        projectedBlocks = await mempoolBlocks.makeBlockTemplates(auditMempool, false);
+      } else {
+        projectedBlocks = mempoolBlocks.updateMempoolBlocks(auditMempool, false);
+      }
 
-    if (Common.indexingEnabled() && memPool.isInSync()) {
-      const projectedBlocks = mempoolBlocks.getMempoolBlocksWithTransactions();
+      if (Common.indexingEnabled() && memPool.isInSync()) {
+        const { censored, added, fresh, score, similarity } = Audit.auditBlock(transactions, projectedBlocks, auditMempool);
+        const matchRate = Math.round(score * 100 * 100) / 100;
 
-      const { censored, added, fresh, score } = Audit.auditBlock(transactions, projectedBlocks, _memPool);
-      const matchRate = Math.round(score * 100 * 100) / 100;
+        const stripped = projectedBlocks[0]?.transactions ? projectedBlocks[0].transactions.map((tx) => {
+          return {
+            txid: tx.txid,
+            vsize: tx.vsize,
+            fee: tx.fee ? Math.round(tx.fee) : 0,
+            value: tx.value,
+          };
+        }) : [];
 
-      const stripped = projectedBlocks[0]?.transactions ? projectedBlocks[0].transactions.map((tx) => {
-        return {
-          txid: tx.txid,
-          vsize: tx.vsize,
-          fee: tx.fee ? Math.round(tx.fee) : 0,
-          value: tx.value,
-        };
-      }) : [];
+        BlocksSummariesRepository.$saveTemplate({
+          height: block.height,
+          template: {
+            id: block.id,
+            transactions: stripped
+          }
+        });
 
-      BlocksSummariesRepository.$saveTemplate({
-        height: block.height,
-        template: {
-          id: block.id,
-          transactions: stripped
+        BlocksAuditsRepository.$saveAudit({
+          time: block.timestamp,
+          height: block.height,
+          hash: block.id,
+          addedTxs: added,
+          missingTxs: censored,
+          freshTxs: fresh,
+          matchRate: matchRate,
+        });
+
+        if (block.extras) {
+          block.extras.matchRate = matchRate;
+          block.extras.similarity = similarity;
         }
-      });
-
-      BlocksAuditsRepository.$saveAudit({
-        time: block.timestamp,
-        height: block.height,
-        hash: block.id,
-        addedTxs: added,
-        missingTxs: censored,
-        freshTxs: fresh,
-        matchRate: matchRate,
-      });
-
-      if (block.extras) {
-        block.extras.matchRate = matchRate;
+      }
+    } else if (block.extras) {
+      const mBlocks = mempoolBlocks.getMempoolBlocksWithTransactions();
+      if (mBlocks?.length && mBlocks[0].transactions) {
+        block.extras.similarity = Common.getSimilarity(mBlocks[0], transactions);
       }
     }
 
@@ -471,9 +486,9 @@ class WebsocketHandler {
     }
 
     if (config.MEMPOOL.ADVANCED_GBT_MEMPOOL) {
-      await mempoolBlocks.updateBlockTemplates(_memPool, [], removed);
+      await mempoolBlocks.updateBlockTemplates(_memPool, [], removed, true);
     } else {
-      mempoolBlocks.updateMempoolBlocks(_memPool);
+      mempoolBlocks.updateMempoolBlocks(_memPool, true);
     }
     const mBlocks = mempoolBlocks.getMempoolBlocks();
     const mBlockDeltas = mempoolBlocks.getMempoolBlockDeltas();
@@ -493,7 +508,7 @@ class WebsocketHandler {
       const response = {
         'block': block,
         'mempoolInfo': memPool.getMempoolInfo(),
-        'da': da,
+        'da': da?.previousTime ? da : undefined,
         'fees': fees,
       };
 

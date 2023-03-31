@@ -121,7 +121,7 @@ export class LightningStatisticsChartComponent implements OnInit {
         },
         text: $localize`:@@ea8db27e6db64f8b940711948c001a1100e5fe9f:Lightning Network Capacity`,
         left: 'center',
-        top: 11,
+        top: 0,
         zlevel: 10,
       };
     }
@@ -137,8 +137,8 @@ export class LightningStatisticsChartComponent implements OnInit {
         ]),
       ],
       grid: {
-        height: this.widget ? 100 : undefined,
-        top: this.widget ? 10 : 40,
+        height: this.widget ? 90 : undefined,
+        top: this.widget ? 20 : 40,
         bottom: this.widget ? 0 : 70,
         right: (isMobile() && this.widget) ? 35 : this.right,
         left: (isMobile() && this.widget) ? 40 :this.left,
@@ -256,7 +256,7 @@ export class LightningStatisticsChartComponent implements OnInit {
       series: data.channel_count.length === 0 ? [] : [
         {
           zlevel: 1,
-          name: 'Channels',
+          name: $localize`:@@807cf11e6ac1cde912496f764c176bdfdd6b7e19:Channels`,
           showSymbol: false,
           symbol: 'none',
           data: data.channel_count,

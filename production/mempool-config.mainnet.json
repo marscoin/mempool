@@ -10,9 +10,12 @@
     "POLL_RATE_MS": 1000,
     "INDEXING_BLOCKS_AMOUNT": -1,
     "BLOCKS_SUMMARIES_INDEXING": true,
+    "AUDIT": true,
+    "CPFP_INDEXING": true,
     "ADVANCED_GBT_AUDIT": true,
-    "ADVANCED_GBT_MEMPOOL": false,
-    "USE_SECOND_NODE_FOR_MINFEE": true
+    "ADVANCED_GBT_MEMPOOL": true,
+    "USE_SECOND_NODE_FOR_MINFEE": true,
+    "DISK_CACHE_BLOCK_INTERVAL": 1
   },
   "SYSLOG" : {
     "MIN_PRIORITY": "debug"
