@@ -24,26 +24,26 @@ class Indexer {
    */
   public async checkAvailableCoreIndexes(): Promise<void> {
     const updatedCoreIndexes: CoreIndex[] = [];
-
-    const indexes: any = await bitcoinClient.getIndexInfo();
-    for (const indexName in indexes) {
-      const newState = {
-        name: indexName,
-        synced: indexes[indexName].synced,
-        best_block_height: indexes[indexName].best_block_height,
-      };
-      logger.info(`Core index '${indexName}' is ${indexes[indexName].synced ? 'synced' : 'not synced'}. Best block height is ${indexes[indexName].best_block_height}`);      
-      updatedCoreIndexes.push(newState);
-
-      if (indexName === 'coinstatsindex' && newState.synced === true) {
-        const previousState = this.isCoreIndexReady('coinstatsindex');
+    logger.debug(`getIndexInfo`);
+    //const indexes: any = await bitcoinClient.getIndexInfo();
+    //for (const indexName in indexes) {
+    //  const newState = {
+    //    name: indexName,
+    //    synced: indexes[indexName].synced,
+    //    best_block_height: indexes[indexName].best_block_height,
+    //  };
+    //  logger.info(`Core index '${indexName}' is ${indexes[indexName].synced ? 'synced' : 'not synced'}. Best block height is ${indexes[indexName].best_block_height}`);      
+    //  updatedCoreIndexes.push(newState);
+//
+  //    if (indexName === 'coinstatsindex' && newState.synced === true) {
+    //    const previousState = this.isCoreIndexReady('coinstatsindex');
         // if (!previousState || previousState.synced === false) {
-          this.runSingleTask('coinStatsIndex');
+      //    this.runSingleTask('coinStatsIndex');
         // }
-      }
-    }
+     // }
+   // }
 
-    this.coreIndexes = updatedCoreIndexes;
+    //this.coreIndexes = updatedCoreIndexes;
   }
 
   /**
@@ -118,7 +118,7 @@ class Indexer {
 
     try {
       await priceUpdater.$run();
-
+      logger.debug(`priceUpdater`);
       const chainValid = await blocks.$generateBlockDatabase();
       if (chainValid === false) {
         // Chain of block hash was invalid, so we need to reindex. Stop here and continue at the next iteration
@@ -127,7 +127,7 @@ class Indexer {
         this.indexerRunning = false;
         return;
       }
-
+      logger.debug(`blocksPrices`);
       this.runSingleTask('blocksPrices');
       await mining.$indexDifficultyAdjustments();
       await mining.$generateNetworkHashrateHistory();

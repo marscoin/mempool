@@ -311,29 +311,20 @@ class MempoolBlocks {
     return mempoolBlocks;
   }
 
-  private dataToMempoolBlocks(transactions: TransactionExtended[],
-    blockSize: number | undefined, blockWeight: number | undefined, blocksIndex: number): MempoolBlockWithTransactions {
+  private dataToMempoolBlocks(transactions: TransactionExtended[]): MempoolBlockWithTransactions {
     logger.debug(`dataToMem0`);
-    let totalSize = blockSize || 0;
-    let totalWeight = blockWeight || 0;
-    if (blockSize === undefined && blockWeight === undefined) {
-      totalSize = 0;
-      totalWeight = 0;
-      transactions.forEach(tx => {
-        totalSize += tx.size;
-        totalWeight += tx.size * 4;
-      });
-    }
+    let totalSize = 0;
+    let totalWeight = 0;
+    const fitTransactions: TransactionExtended[] = [];
+    transactions.forEach(tx => {
+      totalSize += tx.size;
+      totalWeight += tx.weight;
+      if ((totalWeight + tx.weight) <= config.MEMPOOL.BLOCK_WEIGHT_UNITS * 1.2) {
+        fitTransactions.push(tx);
+      }
+    });
     logger.debug(`dataToMem 1`);
-    let rangeLength = 4;
-    if (blocksIndex === 0) {
-      rangeLength = 8;
-    }
-    if (transactions.length > 4000) {
-      rangeLength = 6;
-    } else if (transactions.length > 10000) {
-      rangeLength = 8;
-    }
+    const feeStats = Common.calcEffectiveFeeStatistics(transactions);
     logger.debug(`dataToMem 2`);
     return {
       blockSize: totalSize,
@@ -341,7 +332,7 @@ class MempoolBlocks {
       nTx: transactions.length,
       totalFees: transactions.reduce((acc, cur) => acc + cur.fee, 0),
       medianFee: 0.0, //Common.percentile(transactions.map((tx) => tx.effectiveFeePerVsize), config.MEMPOOL.RECOMMENDED_FEE_PERCENTILE),
-      feeRange: Common.getFeesInRange(transactions, rangeLength),
+      feeRange: [0.0, 0.0, 0.0], //feeStats.feeRange //Common.getFeesInRange(transactions),
       transactionIds: transactions.map((tx) => tx.txid),
       transactions: fitTransactions.map((tx) => Common.stripTransaction(tx)),
     };

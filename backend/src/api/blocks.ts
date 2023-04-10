@@ -135,7 +135,7 @@ class Blocks {
     if (!quiet) {
       logger.debug(`${transactionsFound} of ${txIds.length} found in mempool. ${transactionsFetched} fetched through backend service.`);
     }
-
+    logger.debug(`fetched`);
     return transactions;
   }
 
@@ -179,13 +179,14 @@ class Blocks {
    */
   private async $getBlockExtended(block: IEsploraApi.Block, transactions: TransactionExtended[]): Promise<BlockExtended> {
     const coinbaseTx = transactionUtils.stripCoinbaseTransaction(transactions[0]);
-    
+    logger.debug(`in blk1`); 
     const blk: Partial<BlockExtended> = Object.assign({}, block);
     const extras: Partial<BlockExtension> = {};
-
+    logger.debug(`in blk2`);
     extras.reward = transactions[0].vout.reduce((acc, curr) => acc + curr.value, 0);
     extras.coinbaseRaw = coinbaseTx.vin[0].scriptsig;
     extras.orphans = chainTips.getOrphanedBlocksAtHeight(blk.height);
+    logger.debug(`in blk3`);
 
     if (block.height === 0) {
       extras.medianFee = 0; // 50th percentiles
@@ -201,38 +202,43 @@ class Blocks {
       extras.segwitTotalTxs = 0;
       extras.segwitTotalSize = 0;
       extras.segwitTotalWeight = 0;
+      logger.debug(`blk3a`);
     } else {
-      const stats: IBitcoinApi.BlockStats = await bitcoinClient.getBlockStats(block.id);
+      logger.debug(`blk3b`);
+      //const stats: IBitcoinApi.BlockStats = await bitcoinClient.getBlockStats(block.id);
       let feeStats = {
-        medianFee: stats.feerate_percentiles[2], // 50th percentiles
-        feeRange: [stats.minfeerate, stats.feerate_percentiles, stats.maxfeerate].flat(),
+        medianFee: 0.0, //stats.feerate_percentiles[2], // 50th percentiles
+        feeRange: 0.0, //[stats.minfeerate, stats.feerate_percentiles, stats.maxfeerate].flat(),
       };
-      if (transactions?.length > 1) {
-        feeStats = Common.calcEffectiveFeeStatistics(transactions);
-      }
+      logger.debug(`blk3c`);
+      //if (transactions?.length > 1) {
+      //  feeStats = Common.calcEffectiveFeeStatistics(transactions);
+      //}
+      logger.debug(`in blk4`);
       extras.medianFee = 0.0; //feeStats.medianFee;
       extras.feeRange = [0.0, 0.0, 0.0]; //feeStats.feeRange;
       extras.totalFees = 0.0; //stats.totalfee;
       extras.avgFee = 0.0; //stats.avgfee;
       extras.avgFeeRate = 0.0; //stats.avgfeerate;
-      extras.utxoSetChange = stats.utxo_increase;
-      extras.avgTxSize = Math.round(stats.total_size / stats.txs * 100) * 0.01;
-      extras.totalInputs = stats.ins;
-      extras.totalOutputs = stats.outs;
-      extras.totalOutputAmt = stats.total_out;
-      extras.segwitTotalTxs = stats.swtxs;
-      extras.segwitTotalSize = stats.swtotal_size;
-      extras.segwitTotalWeight = stats.swtotal_weight;
+      extras.utxoSetChange = 0; //stats.utxo_increase;
+      extras.avgTxSize = 0; //Math.round(stats.total_size / stats.txs * 100) * 0.01;
+      extras.totalInputs = 1; //stats.ins;
+      extras.totalOutputs = 1; //stats.outs;
+      extras.totalOutputAmt = 0; //stats.total_out;
+      extras.segwitTotalTxs = 0; //stats.swtxs;
+      extras.segwitTotalSize = 0; //stats.swtotal_size;
+      extras.segwitTotalWeight = 0; //stats.swtotal_weight;
     }
-
-    if (Common.blocksSummariesIndexingEnabled()) {
-      extras.feePercentiles = await BlocksSummariesRepository.$getFeePercentilesByBlockId(block.id);
-      if (extras.feePercentiles !== null) {
-        extras.medianFeeAmt = extras.feePercentiles[3];
-      }
-    }
+    logger.debug(`in blk5`);
+    //if (Common.blocksSummariesIndexingEnabled()) {
+    //  extras.feePercentiles = await BlocksSummariesRepository.$getFeePercentilesByBlockId(block.id);
+    //  if (extras.feePercentiles !== null) {
+    //    extras.medianFeeAmt = extras.feePercentiles[3];
+    //  }
+    //}
   
     extras.virtualSize = block.weight / 4.0;
+    logger.debug(`in blk6`);
     if (coinbaseTx?.vout.length > 0) {
       extras.coinbaseAddress = coinbaseTx.vout[0].scriptpubkey_address ?? null;
       extras.coinbaseSignature = coinbaseTx.vout[0].scriptpubkey_asm ?? null;
@@ -242,19 +248,22 @@ class Blocks {
       extras.coinbaseSignature = null;
       extras.coinbaseSignatureAscii = null;
     }
+    //logger.debug(`in blk7`);
+    logger.debug(`${block.id}`);
+//    const header = await bitcoinClient.getBlockHeader(block.id);
+    extras.header = block.id; //header;
+    //logger.debug(`in blk8`);
 
-    const header = await bitcoinClient.getBlockHeader(block.id, false);
-    extras.header = header;
-
-    const coinStatsIndex = indexer.isCoreIndexReady('coinstatsindex');
-    if (coinStatsIndex !== null && coinStatsIndex.best_block_height >= block.height) {
-      const txoutset = await bitcoinClient.getTxoutSetinfo('none', block.height);
-      extras.utxoSetSize = txoutset.txouts,
-      extras.totalInputAmt = Math.round(txoutset.block_info.prevout_spent * 100000000);
-    } else {
-      extras.utxoSetSize = null;
-      extras.totalInputAmt = null;
-    }
+    //const coinStatsIndex = indexer.isCoreIndexReady('coinstatsindex');
+    //if (coinStatsIndex !== null && coinStatsIndex.best_block_height >= block.height) {
+    //  const txoutset = await bitcoinClient.getTxoutSetinfo('none', block.height);
+    //  extras.utxoSetSize = txoutset.txouts,
+    //  extras.totalInputAmt = Math.round(txoutset.block_info.prevout_spent * 100000000);
+    //} else {
+    extras.utxoSetSize = null;
+    extras.totalInputAmt = null;
+    //}
+    logger.debug(`in blk9`);
 
     if (['mainnet', 'testnet', 'signet'].includes(config.MEMPOOL.NETWORK)) {
       let pool: PoolTag;
@@ -289,6 +298,12 @@ class Blocks {
     }
 
     blk.extras = <BlockExtension>extras;
+
+    if(!blk.tx_count){
+	logger.debug(`missing tx_count`);
+    	blk.tx_count = transactions.length;
+
+    }
     return <BlockExtended>blk;
   }
 
@@ -505,6 +520,7 @@ class Blocks {
           }
           const blockHash = await bitcoinApi.$getBlockHash(blockHeight);
           const block: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(blockHash);
+	  logger.debug(`TestE1`);
           const transactions = await this.$getTransactionsExtended(blockHash, block.height, true, true);
           const blockExtended = await this.$getBlockExtended(block, transactions);
 
@@ -587,8 +603,11 @@ class Blocks {
       const txIds: string[] = await bitcoinApi.$getTxIdsForBlock(blockHash);
       logger.debug(`Hello Test4`);
       const transactions = await this.$getTransactionsExtended(blockHash, block.height, false);
+      logger.debug(`Hello Test5`);
       const cpfpSummary: CpfpSummary = Common.calculateCpfp(block.height, transactions);
+      logger.debug(`Hello Test6`);
       const blockExtended: BlockExtended = await this.$getBlockExtended(block, cpfpSummary.transactions);
+      logger.debug(`Hello Test7`);
       const blockSummary: BlockSummary = this.summarizeBlock(verboseBlock);
 
 
@@ -694,6 +713,7 @@ class Blocks {
 
     const blockHash = await bitcoinApi.$getBlockHash(height);
     const block: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(blockHash);
+    logger.debug(`TestE2`);
     const transactions = await this.$getTransactionsExtended(blockHash, block.height, true);
     const blockExtended = await this.$getBlockExtended(block, transactions);
     const ttest = block.weight * 4;

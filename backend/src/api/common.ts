@@ -416,25 +416,25 @@ export class Common {
     // lowest of
     // a) the 1st percentile of effective fee rates
     // b) the minimum effective fee rate in the last 2% of transactions (in block order)
-    const minFee = Math.min(
-      Common.getNthPercentile(1, sortedTxs).rate,
-      transactions.slice(-transactions.length / 50).reduce((min, tx) => { return Math.min(min, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, Infinity)
-    );
+    const minFee = 0.0001; //Math.min(
+      //Common.getNthPercentile(1, sortedTxs).rate,
+      //transactions.slice(-transactions.length / 50).reduce((min, tx) => { return Math.min(min, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, Infinity)
+    //);
 
     // maximum effective fee heuristic:
     // highest of
     // a) the 99th percentile of effective fee rates
     // b) the maximum effective fee rate in the first 2% of transactions (in block order)
-    const maxFee = Math.max(
-      Common.getNthPercentile(99, sortedTxs).rate,
-      transactions.slice(0, transactions.length / 50).reduce((max, tx) => { return Math.max(max, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, 0)
-    );
+    const maxFee = 0.1 //Math.max(
+      //Common.getNthPercentile(99, sortedTxs).rate,
+      //transactions.slice(0, transactions.length / 50).reduce((max, tx) => { return Math.max(max, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, 0)
+    //);
 
     return {
       medianFee: medianFeeRate,
       feeRange: [
         minFee,
-        [10,25,50,75,90].map(n => Common.getNthPercentile(n, sortedTxs).rate),
+        [0.001, 0.005, 0.01, 0.05, 0.09], //[10,25,50,75,90].map(n => Common.getNthPercentile(n, sortedTxs).rate),
         maxFee,
       ].flat(),
     };
