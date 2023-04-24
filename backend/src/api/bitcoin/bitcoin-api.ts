@@ -223,7 +223,7 @@ class BitcoinApi implements AbstractBitcoinApi {
         sequence: vin.sequence,
         txid: vin.txid || '',
         vout: vin.vout || 0,
-        witness: [],
+        witness: vin.txinwitness || [], 
         inner_redeemscript_asm: '',
         inner_witnessscript_asm: '',
       };
@@ -284,11 +284,10 @@ class BitcoinApi implements AbstractBitcoinApi {
       mempoolEntry = this.rawMempoolCache[transaction.txid];
     } else {
       logger.debug(`mementry`);
-      //function not yet supported in Marscoin
-      //mempoolEntry = await this.$getMempoolEntry(transaction.txid);
+      mempoolEntry = await this.$getMempoolEntry(transaction.txid);
     }
     //logger.debug(`calc base fee`);
-    transaction.fee = 0.0; //Math.round(mempoolEntry.fees.base * 100000000);
+    transaction.fee = Math.round(mempoolEntry.fees.base * 100000000);
     return transaction;
   }
 

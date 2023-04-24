@@ -36,11 +36,11 @@ class PriceUpdater {
   constructor() {
     this.latestPrices = this.getEmptyPricesObj();
 
-    this.feeds.push(new BitflyerApi()); // Does not have historical endpoint
-    this.feeds.push(new KrakenApi());
+    //this.feeds.push(new BitflyerApi()); // Does not have historical endpoint
+    //this.feeds.push(new KrakenApi());
     this.feeds.push(new CoinbaseApi());
-    this.feeds.push(new BitfinexApi());
-    this.feeds.push(new GeminiApi());
+    //this.feeds.push(new BitfinexApi());
+    //this.feeds.push(new GeminiApi());
   }
 
   public getLatestPrices(): ApiPrice {

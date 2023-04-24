@@ -331,8 +331,8 @@ class MempoolBlocks {
       blockVSize: totalWeight / 4,
       nTx: transactions.length,
       totalFees: transactions.reduce((acc, cur) => acc + cur.fee, 0),
-      medianFee: 0.0, //Common.percentile(transactions.map((tx) => tx.effectiveFeePerVsize), config.MEMPOOL.RECOMMENDED_FEE_PERCENTILE),
-      feeRange: [0.0, 0.0, 0.0], //feeStats.feeRange //Common.getFeesInRange(transactions),
+      medianFee: feeStats.medianFee, //Common.percentile(transactions.map((tx) => tx.effectiveFeePerVsize), config.MEMPOOL.RECOMMENDED_FEE_PERCENTILE),
+      feeRange: feeStats.feeRange, //Common.getFeesInRange(transactions, rangeLength),
       transactionIds: transactions.map((tx) => tx.txid),
       transactions: fitTransactions.map((tx) => Common.stripTransaction(tx)),
     };

@@ -1,8 +1,8 @@
 import config from '../config';
-import bitcoinApi, { bitcoinCoreApi } from './bitcoin/bitcoin-api-factory';
+import bitcoinApi from './bitcoin/bitcoin-api-factory';
 import logger from '../logger';
 import memPool from './mempool';
-import { BlockExtended, BlockExtension, BlockSummary, PoolTag, TransactionExtended, TransactionStripped, TransactionMinerInfo, CpfpSummary } from '../mempool.interfaces';
+import { BlockExtended, BlockExtension, BlockSummary, PoolTag, TransactionExtended, TransactionStripped, TransactionMinerInfo } from '../mempool.interfaces';
 import { Common } from './common';
 import diskCache from './disk-cache';
 import transactionUtils from './transaction-utils';
@@ -94,9 +94,7 @@ class Blocks {
           logger.debug(`Indexing tx ${i + 1} of ${txIds.length} in block #${blockHeight}`);
         }
         try {
-	  logger.debug(`about to get Tx extended`)
           const tx = await transactionUtils.$getTransactionExtended(txIds[i]);
-	  logger.debug(`..got tx extended`)
           transactions.push(tx);
           transactionsFetched++;
         } catch (e) {
@@ -135,7 +133,7 @@ class Blocks {
     if (!quiet) {
       logger.debug(`${transactionsFound} of ${txIds.length} found in mempool. ${transactionsFetched} fetched through backend service.`);
     }
-    logger.debug(`fetched`);
+
     return transactions;
   }
 
@@ -145,16 +143,12 @@ class Blocks {
    * @returns BlockSummary
    */
   public summarizeBlock(block: IBitcoinApi.VerboseBlock): BlockSummary {
-    if (Common.isLiquid()) {
-      block = this.convertLiquidFees(block);
-    }
-    const stripped = block.tx.map((tx: IBitcoinApi.VerboseTransaction) => {
+    const stripped = block.tx.map((tx) => {
       return {
         txid: tx.txid,
-        //vsize: tx.weight / 4,
-	vsize: tx.vsize,
+        vsize: tx.weight / 4,
         fee: tx.fee ? Math.round(tx.fee * 100000000) : 0,
-        value: tx.vout ? Math.round(tx.vout.reduce((acc, vout) => acc + (vout.value ? vout.value : 0), 0) * 100000000) : 0
+        value: Math.round(tx.vout.reduce((acc, vout) => acc + (vout.value ? vout.value : 0), 0) * 100000000)
       };
     });
 
@@ -162,13 +156,6 @@ class Blocks {
       id: block.hash,
       transactions: stripped
     };
-  }
-
-  private convertLiquidFees(block: IBitcoinApi.VerboseBlock): IBitcoinApi.VerboseBlock {
-    block.tx.forEach(tx => {
-      tx.fee = Object.values(tx.fee || {}).reduce((total, output) => total + output, 0);
-    });
-    return block;
   }
 
   /**
@@ -179,14 +166,13 @@ class Blocks {
    */
   private async $getBlockExtended(block: IEsploraApi.Block, transactions: TransactionExtended[]): Promise<BlockExtended> {
     const coinbaseTx = transactionUtils.stripCoinbaseTransaction(transactions[0]);
-    logger.debug(`in blk1`); 
+    
     const blk: Partial<BlockExtended> = Object.assign({}, block);
     const extras: Partial<BlockExtension> = {};
-    logger.debug(`in blk2`);
+
     extras.reward = transactions[0].vout.reduce((acc, curr) => acc + curr.value, 0);
     extras.coinbaseRaw = coinbaseTx.vin[0].scriptsig;
     extras.orphans = chainTips.getOrphanedBlocksAtHeight(blk.height);
-    logger.debug(`in blk3`);
 
     if (block.height === 0) {
       extras.medianFee = 0; // 50th percentiles
@@ -202,43 +188,31 @@ class Blocks {
       extras.segwitTotalTxs = 0;
       extras.segwitTotalSize = 0;
       extras.segwitTotalWeight = 0;
-      logger.debug(`blk3a`);
     } else {
-      logger.debug(`blk3b`);
-      //const stats: IBitcoinApi.BlockStats = await bitcoinClient.getBlockStats(block.id);
-      let feeStats = {
-        medianFee: 0.0, //stats.feerate_percentiles[2], // 50th percentiles
-        feeRange: 0.0, //[stats.minfeerate, stats.feerate_percentiles, stats.maxfeerate].flat(),
-      };
-      logger.debug(`blk3c`);
-      //if (transactions?.length > 1) {
-      //  feeStats = Common.calcEffectiveFeeStatistics(transactions);
-      //}
-      logger.debug(`in blk4`);
-      extras.medianFee = 0.0; //feeStats.medianFee;
-      extras.feeRange = [0.0, 0.0, 0.0]; //feeStats.feeRange;
-      extras.totalFees = 0.0; //stats.totalfee;
-      extras.avgFee = 0.0; //stats.avgfee;
-      extras.avgFeeRate = 0.0; //stats.avgfeerate;
-      extras.utxoSetChange = 0; //stats.utxo_increase;
-      extras.avgTxSize = 0; //Math.round(stats.total_size / stats.txs * 100) * 0.01;
-      extras.totalInputs = 1; //stats.ins;
-      extras.totalOutputs = 1; //stats.outs;
-      extras.totalOutputAmt = 0; //stats.total_out;
-      extras.segwitTotalTxs = 0; //stats.swtxs;
-      extras.segwitTotalSize = 0; //stats.swtotal_size;
-      extras.segwitTotalWeight = 0; //stats.swtotal_weight;
+      const stats: IBitcoinApi.BlockStats = await bitcoinClient.getBlockStats(block.id);
+      extras.medianFee = stats.feerate_percentiles[2]; // 50th percentiles
+      extras.feeRange = [stats.minfeerate, stats.feerate_percentiles, stats.maxfeerate].flat();
+      extras.totalFees = stats.totalfee;
+      extras.avgFee = stats.avgfee;
+      extras.avgFeeRate = stats.avgfeerate;
+      extras.utxoSetChange = stats.utxo_increase;
+      extras.avgTxSize = Math.round(stats.total_size / stats.txs * 100) * 0.01;
+      extras.totalInputs = stats.ins;
+      extras.totalOutputs = stats.outs;
+      extras.totalOutputAmt = stats.total_out;
+      extras.segwitTotalTxs = stats.swtxs;
+      extras.segwitTotalSize = stats.swtotal_size;
+      extras.segwitTotalWeight = stats.swtotal_weight;
     }
-    logger.debug(`in blk5`);
-    //if (Common.blocksSummariesIndexingEnabled()) {
-    //  extras.feePercentiles = await BlocksSummariesRepository.$getFeePercentilesByBlockId(block.id);
-    //  if (extras.feePercentiles !== null) {
-    //    extras.medianFeeAmt = extras.feePercentiles[3];
-    //  }
-    //}
+
+    if (Common.blocksSummariesIndexingEnabled()) {
+      extras.feePercentiles = await BlocksSummariesRepository.$getFeePercentilesByBlockId(block.id);
+      if (extras.feePercentiles !== null) {
+        extras.medianFeeAmt = extras.feePercentiles[3];
+      }
+    }
   
     extras.virtualSize = block.weight / 4.0;
-    logger.debug(`in blk6`);
     if (coinbaseTx?.vout.length > 0) {
       extras.coinbaseAddress = coinbaseTx.vout[0].scriptpubkey_address ?? null;
       extras.coinbaseSignature = coinbaseTx.vout[0].scriptpubkey_asm ?? null;
@@ -248,22 +222,19 @@ class Blocks {
       extras.coinbaseSignature = null;
       extras.coinbaseSignatureAscii = null;
     }
-    //logger.debug(`in blk7`);
-    logger.debug(`${block.id}`);
-//    const header = await bitcoinClient.getBlockHeader(block.id);
-    extras.header = block.id; //header;
-    //logger.debug(`in blk8`);
 
-    //const coinStatsIndex = indexer.isCoreIndexReady('coinstatsindex');
-    //if (coinStatsIndex !== null && coinStatsIndex.best_block_height >= block.height) {
-    //  const txoutset = await bitcoinClient.getTxoutSetinfo('none', block.height);
-    //  extras.utxoSetSize = txoutset.txouts,
-    //  extras.totalInputAmt = Math.round(txoutset.block_info.prevout_spent * 100000000);
-    //} else {
-    extras.utxoSetSize = null;
-    extras.totalInputAmt = null;
-    //}
-    logger.debug(`in blk9`);
+    const header = await bitcoinClient.getBlockHeader(block.id, false);
+    extras.header = header;
+
+    const coinStatsIndex = indexer.isCoreIndexReady('coinstatsindex');
+    if (coinStatsIndex !== null && coinStatsIndex.best_block_height >= block.height) {
+      const txoutset = await bitcoinClient.getTxoutSetinfo('none', block.height);
+      extras.utxoSetSize = txoutset.txouts,
+      extras.totalInputAmt = Math.round(txoutset.block_info.prevout_spent * 100000000);
+    } else {
+      extras.utxoSetSize = null;
+      extras.totalInputAmt = null;
+    }
 
     if (['mainnet', 'testnet', 'signet'].includes(config.MEMPOOL.NETWORK)) {
       let pool: PoolTag;
@@ -276,7 +247,7 @@ class Blocks {
           pool = poolsParser.unknownPool;
         }
       }
-      logger.debug(`Test8`)
+
       if (!pool) { // We should never have this situation in practise
         logger.warn(`Cannot assign pool to block ${blk.height} and 'unknown' pool does not exist. ` +
           `Check your "pools" table entries`);
@@ -298,12 +269,6 @@ class Blocks {
     }
 
     blk.extras = <BlockExtension>extras;
-
-    if(!blk.tx_count){
-	logger.debug(`missing tx_count`);
-    	blk.tx_count = transactions.length;
-
-    }
     return <BlockExtended>blk;
   }
 
@@ -519,14 +484,11 @@ class Blocks {
             loadingIndicators.setProgress('block-indexing', progress, false);
           }
           const blockHash = await bitcoinApi.$getBlockHash(blockHeight);
-          const block: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(blockHash);
-	  logger.debug(`TestE1`);
+          const block: IEsploraApi.Block = await bitcoinApi.$getBlock(blockHash);
           const transactions = await this.$getTransactionsExtended(blockHash, block.height, true, true);
           const blockExtended = await this.$getBlockExtended(block, transactions);
 
           newlyIndexed++;
-	  blockExtended.weight = blockExtended.size * 4;
-	  logger.debug(`Weight3: ${blockExtended.weight}`)
           await blocksRepository.$saveBlockInDatabase(blockExtended);
         }
 
@@ -570,13 +532,13 @@ class Blocks {
       if (blockchainInfo.blocks === blockchainInfo.headers) {
         const heightDiff = blockHeightTip % 2016;
         const blockHash = await bitcoinApi.$getBlockHash(blockHeightTip - heightDiff);
-        const block: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(blockHash);
+        const block: IEsploraApi.Block = await bitcoinApi.$getBlock(blockHash);
         this.lastDifficultyAdjustmentTime = block.timestamp;
         this.currentDifficulty = block.difficulty;
 
         if (blockHeightTip >= 2016) {
           const previousPeriodBlockHash = await bitcoinApi.$getBlockHash(blockHeightTip - heightDiff - 2016);
-          const previousPeriodBlock: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(previousPeriodBlockHash);
+          const previousPeriodBlock: IEsploraApi.Block = await bitcoinApi.$getBlock(previousPeriodBlockHash);
           this.previousDifficultyRetarget = (block.difficulty - previousPeriodBlock.difficulty) / previousPeriodBlock.difficulty * 100;
           logger.debug(`Initial difficulty adjustment data set.`);
         }
@@ -586,32 +548,22 @@ class Blocks {
     }
 
     while (this.currentBlockHeight < blockHeightTip) {
-      if (this.currentBlockHeight === 0) {
+      if (this.currentBlockHeight < blockHeightTip - config.MEMPOOL.INITIAL_BLOCKS_AMOUNT) {
         this.currentBlockHeight = blockHeightTip;
       } else {
         this.currentBlockHeight++;
         logger.debug(`New block found (#${this.currentBlockHeight})!`);
         await chainTips.updateOrphanedBlocks();
       }
-      logger.debug(`Hello Test`);
+
       const blockHash = await bitcoinApi.$getBlockHash(this.currentBlockHeight);
-      logger.debug(`Hello Test1 ${blockHash}`);
-      const verboseBlock = await bitcoinClient.getBlock(blockHash);
-      logger.debug(`Hello Test2`);
+      const verboseBlock = await bitcoinClient.getBlock(blockHash, 2);
       const block = BitcoinApi.convertBlock(verboseBlock);
-      logger.debug(`Hello Test3`);
       const txIds: string[] = await bitcoinApi.$getTxIdsForBlock(blockHash);
-      logger.debug(`Hello Test4`);
       const transactions = await this.$getTransactionsExtended(blockHash, block.height, false);
-      logger.debug(`Hello Test5`);
-      const cpfpSummary: CpfpSummary = Common.calculateCpfp(block.height, transactions);
-      logger.debug(`Hello Test6`);
-      const blockExtended: BlockExtended = await this.$getBlockExtended(block, cpfpSummary.transactions);
-      logger.debug(`Hello Test7`);
+      const blockExtended: BlockExtended = await this.$getBlockExtended(block, transactions);
       const blockSummary: BlockSummary = this.summarizeBlock(verboseBlock);
 
-
-      logger.debug(`Block Hash: ${blockHash}`);
       // start async callbacks
       const callbackPromises = this.newAsyncBlockCallbacks.map((cb) => cb(blockExtended, txIds, transactions));
 
@@ -637,8 +589,6 @@ class Blocks {
             logger.info(`Re-indexed 10 blocks and summaries. Also re-indexed the last difficulty adjustments. Will re-index latest hashrates in a few seconds.`);
             indexer.reindex();
           }
-	  blockExtended.weight = blockExtended.size * 4;
-	  logger.debug(`Weight4: ${blockExtended.weight}`)
           await blocksRepository.$saveBlockInDatabase(blockExtended);
 
           const lastestPriceId = await PricesRepository.$getLatestPriceId();
@@ -659,7 +609,7 @@ class Blocks {
             await this.$getStrippedBlockTransactions(blockExtended.id, true);
           }
           if (config.MEMPOOL.CPFP_INDEXING) {
-            this.$saveCpfp(blockExtended.id, this.currentBlockHeight, cpfpSummary);
+            this.$indexCPFP(blockExtended.id, this.currentBlockHeight);
           }
         }
       }
@@ -691,7 +641,7 @@ class Blocks {
       if (this.newBlockCallbacks.length) {
         this.newBlockCallbacks.forEach((cb) => cb(blockExtended, txIds, transactions));
       }
-      if (!memPool.hasPriority() && (block.height % config.MEMPOOL.DISK_CACHE_BLOCK_INTERVAL === 0)) {
+      if (!memPool.hasPriority()) {
         diskCache.$saveCacheToDisk();
       }
 
@@ -712,13 +662,9 @@ class Blocks {
     }
 
     const blockHash = await bitcoinApi.$getBlockHash(height);
-    const block: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(blockHash);
-    logger.debug(`TestE2`);
+    const block: IEsploraApi.Block = await bitcoinApi.$getBlock(blockHash);
     const transactions = await this.$getTransactionsExtended(blockHash, block.height, true);
     const blockExtended = await this.$getBlockExtended(block, transactions);
-    const ttest = block.weight * 4;
-    logger.debug(`Weight1: ${ttest}`)
-    blockExtended.weight = ttest;
 
     if (Common.indexingEnabled()) {
       await blocksRepository.$saveBlockInDatabase(blockExtended);
@@ -739,12 +685,11 @@ class Blocks {
 
     // Not Bitcoin network, return the block as it from the bitcoin backend
     if (['mainnet', 'testnet', 'signet'].includes(config.MEMPOOL.NETWORK) === false) {
-      return await bitcoinCoreApi.$getBlock(hash);
+      return await bitcoinApi.$getBlock(hash);
     }
 
     // Bitcoin network, add our custom data on top
-    logger.debug(`Weight2`);
-    const block: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(hash);
+    const block: IEsploraApi.Block = await bitcoinApi.$getBlock(hash);
     return await this.$indexBlock(block.height);
   }
 
@@ -803,14 +748,29 @@ class Blocks {
       return returnBlocks;
     }
 
+    // Check if block height exist in local cache to skip the hash lookup
+    const blockByHeight = this.getBlocks().find((b) => b.height === currentHeight);
+    let startFromHash: string | null = null;
+    if (blockByHeight) {
+      startFromHash = blockByHeight.id;
+    } else if (!Common.indexingEnabled()) {
+      startFromHash = await bitcoinApi.$getBlockHash(currentHeight);
+    }
+
+    let nextHash = startFromHash;
     for (let i = 0; i < limit && currentHeight >= 0; i++) {
       let block = this.getBlocks().find((b) => b.height === currentHeight);
       if (block) {
         // Using the memory cache (find by height)
         returnBlocks.push(block);
-      } else {
+      } else if (Common.indexingEnabled()) {
         // Using indexing (find by height, index on the fly, save in database)
         block = await this.$indexBlock(currentHeight);
+        returnBlocks.push(block);
+      } else if (nextHash !== null) {
+        // Without indexing, query block on the fly using bitoin backend, follow previous hash links
+        block = await this.$indexBlock(currentHeight);
+        nextHash = block.previousblockhash;
         returnBlocks.push(block);
       }
       currentHeight--;
@@ -952,27 +912,48 @@ class Blocks {
   }
 
   public getCurrentBlockHeight(): number {
-    logger.debug(`current height`);
     return this.currentBlockHeight;
   }
 
   public async $indexCPFP(hash: string, height: number): Promise<void> {
     const block = await bitcoinClient.getBlock(hash, 2);
     const transactions = block.tx.map(tx => {
+      tx.vsize = tx.weight / 4;
       tx.fee *= 100_000_000;
       return tx;
     });
 
-    const summary = Common.calculateCpfp(height, transactions);
+    const clusters: any[] = [];
 
-    await this.$saveCpfp(hash, height, summary);
-
-    const effectiveFeeStats = Common.calcEffectiveFeeStatistics(summary.transactions);
-    await blocksRepository.$saveEffectiveFeeStats(hash, effectiveFeeStats);
-  }
-
-  public async $saveCpfp(hash: string, height: number, cpfpSummary: CpfpSummary): Promise<void> {
-    const result = await cpfpRepository.$batchSaveClusters(cpfpSummary.clusters);
+    let cluster: TransactionStripped[] = [];
+    let ancestors: { [txid: string]: boolean } = {};
+    for (let i = transactions.length - 1; i >= 0; i--) {
+      const tx = transactions[i];
+      if (!ancestors[tx.txid]) {
+        let totalFee = 0;
+        let totalVSize = 0;
+        cluster.forEach(tx => {
+          totalFee += tx?.fee || 0;
+          totalVSize += tx.vsize;
+        });
+        const effectiveFeePerVsize = totalFee / totalVSize;
+        if (cluster.length > 1) {
+          clusters.push({
+            root: cluster[0].txid,
+            height,
+            txs: cluster.map(tx => { return { txid: tx.txid, weight: tx.vsize * 4, fee: tx.fee || 0 }; }),
+            effectiveFeePerVsize,
+          });
+        }
+        cluster = [];
+        ancestors = {};
+      }
+      cluster.push(tx);
+      tx.vin.forEach(vin => {
+        ancestors[vin.txid] = true;
+      });
+    }
+    const result = await cpfpRepository.$batchSaveClusters(clusters);
     if (!result) {
       await cpfpRepository.$insertProgressMarker(height);
     }
