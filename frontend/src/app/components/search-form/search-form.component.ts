@@ -107,13 +107,7 @@ export class SearchFormComponent implements OnInit {
           }))),
         );
       }),
-      map((result: any[]) => {
-        if (this.network === 'bisq') {
-          result[0] = result[0].map((address: string) => 'B' + address);
-        }
-        return result;
-      }),
-      tap(() => {
+      tap((result: any[]) => {
         this.isTypeaheading$.next(false);
       })
     );
@@ -132,7 +126,7 @@ export class SearchFormComponent implements OnInit {
       ]
       ).pipe(
         map((latestData) => {
-          let searchText = latestData[0];
+          const searchText = latestData[0];
           if (!searchText.length) {
             return {
               searchText: '',
@@ -150,14 +144,14 @@ export class SearchFormComponent implements OnInit {
           const addressPrefixSearchResults = result[0];
           const lightningResults = result[1];
 
+          if (this.network === 'bisq') {
+            return searchText.map((address: string) => 'B' + address);
+          }
+
           const matchesBlockHeight = this.regexBlockheight.test(searchText);
           const matchesTxId = this.regexTransaction.test(searchText) && !this.regexBlockhash.test(searchText);
           const matchesBlockHash = this.regexBlockhash.test(searchText);
           const matchesAddress = this.regexAddress.test(searchText);
-
-          if (matchesAddress && this.network === 'bisq') {
-            searchText = 'B' + searchText;
-          }
 
           return {
             searchText: searchText,

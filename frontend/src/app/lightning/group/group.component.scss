@@ -8,7 +8,7 @@
 }
 
 h1 {
-  margin-inline-start: 15px;
+  margin-left: 15px;
 }
 
 .qr-wrapper {
@@ -56,18 +56,4 @@ h1 {
 
 .description-text {
   white-space: break-spaces;
-}
-
-.timestamp-first .input-group {
-  input {
-    margin-inline-end: .25rem;
-  }
-}
-
-:host-context(.rtl-layout) {
-  .timestamp-first .input-group {
-    button {
-      margin-inline-end: .25rem;
-    }
-  }
 }

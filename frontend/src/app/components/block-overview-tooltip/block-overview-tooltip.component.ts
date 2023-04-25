@@ -1,7 +1,6 @@
 import { Component, ElementRef, ViewChild, Input, OnChanges, ChangeDetectionStrategy } from '@angular/core';
 import { TransactionStripped } from '../../interfaces/websocket.interface';
 import { Position } from '../../components/block-overview-graph/sprite-types.js';
-import { Price } from '../../services/price.service';
 
 @Component({
   selector: 'app-block-overview-tooltip',
@@ -13,7 +12,6 @@ export class BlockOverviewTooltipComponent implements OnChanges {
   @Input() cursorPosition: Position;
   @Input() clickable: boolean;
   @Input() auditEnabled: boolean = false;
-  @Input() blockConversion: Price;
 
   txid = '';
   fee = 0;

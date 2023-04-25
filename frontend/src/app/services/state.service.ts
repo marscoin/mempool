@@ -39,11 +39,9 @@ export interface Env {
   BISQ_WEBSITE_URL: string;
   MINING_DASHBOARD: boolean;
   LIGHTNING: boolean;
-  AUDIT: boolean;
   MAINNET_BLOCK_AUDIT_START_HEIGHT: number;
   TESTNET_BLOCK_AUDIT_START_HEIGHT: number;
   SIGNET_BLOCK_AUDIT_START_HEIGHT: number;
-  HISTORICAL_PRICE: boolean;
 }
 
 const defaultEnv: Env = {
@@ -69,11 +67,9 @@ const defaultEnv: Env = {
   'BISQ_WEBSITE_URL': 'https://bisq.markets',
   'MINING_DASHBOARD': true,
   'LIGHTNING': false,
-  'AUDIT': false,
   'MAINNET_BLOCK_AUDIT_START_HEIGHT': 0,
   'TESTNET_BLOCK_AUDIT_START_HEIGHT': 0,
   'SIGNET_BLOCK_AUDIT_START_HEIGHT': 0,
-  'HISTORICAL_PRICE': true,
 };
 
 @Injectable({
@@ -123,7 +119,6 @@ export class StateService {
   timeLtr: BehaviorSubject<boolean>;
   hideFlow: BehaviorSubject<boolean>;
   hideAudit: BehaviorSubject<boolean>;
-  fiatCurrency$: BehaviorSubject<string>;
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: any,
@@ -189,9 +184,6 @@ export class StateService {
     this.hideAudit.subscribe((hide) => {
       this.storageService.setValue('audit-preference', hide ? 'hide' : 'show');
     });
-    
-    const fiatPreference = this.storageService.getValue('fiat-preference');
-    this.fiatCurrency$ = new BehaviorSubject<string>(fiatPreference || 'USD');
   }
 
   setNetworkBasedonUrl(url: string) {

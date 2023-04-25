@@ -99,9 +99,8 @@ export class NodesPerCountryChartComponent implements OnInit {
           },
           borderColor: '#000',
           formatter: () => {
-            const nodeCount = country.count.toString();
             return `<b style="color: white">${country.name.en} (${country.share}%)</b><br>` +
-              $localize`${nodeCount} nodes` + `<br>` +
+              $localize`${country.count.toString()} nodes` + `<br>` +
               $localize`${this.amountShortenerPipe.transform(country.capacity / 100000000, 2)} BTC capacity`
             ;
           }
@@ -116,7 +115,7 @@ export class NodesPerCountryChartComponent implements OnInit {
         color: 'grey',
       },
       value: totalShareOther,
-      name: $localize`Other (${totalShareOther.toFixed(2) + '%'})`,
+      name: 'Other' + (this.isMobile() ? `` : ` (${totalShareOther.toFixed(2)}%)`),
       label: {
         overflow: 'truncate',
         color: '#b1b1b1',
@@ -132,9 +131,8 @@ export class NodesPerCountryChartComponent implements OnInit {
         },
         borderColor: '#000',
         formatter: () => {
-          const nodeCount = totalNodeOther.toString();
-          return `<b style="color: white">` + $localize`Other (${totalShareOther.toFixed(2) + '%'})` + `</b><br>` +
-            $localize`${nodeCount} nodes`;
+          return `<b style="color: white">${'Other'} (${totalShareOther.toFixed(2)}%)</b><br>` +
+            totalNodeOther.toString() + ` nodes`;
         },
       },
       data: 9999 as any

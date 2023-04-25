@@ -72,10 +72,22 @@ export const chartColors = [
 ];
 
 export const poolsColor = {
-  'unknown': '#FDD835',
-};
+   'foundryusa': '#D81B60',
+   'antpool': '#8E24AA',
+   'f2pool': '#5E35B1',
+   'poolin': '#3949AB',
+   'binancepool': '#1E88E5',
+   'viabtc': '#039BE5',
+   'btccom': '#00897B',
+   'braiinspool': '#00ACC1',
+   'sbicrypto': '#43A047',
+   'marapool': '#7CB342',
+   'luxor': '#C0CA33',
+   'unknown': '#FDD835',
+   'okkong': '#FFB300',
+}
 
-export const feeLevels = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200,
+ export const feeLevels = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200,
   250, 300, 350, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000];
 
 export interface Language {
@@ -87,9 +99,9 @@ export const languages: Language[] = [
    { code: 'ar', name: 'العربية' },         // Arabic
 // { code: 'bg', name: 'Български' },       // Bulgarian
 // { code: 'bs', name: 'Bosanski' },        // Bosnian
-// { code: 'ca', name: 'Català' },          // Catalan
+   { code: 'ca', name: 'Català' },          // Catalan
    { code: 'cs', name: 'Čeština' },         // Czech
-   { code: 'da', name: 'Dansk' },           // Danish
+// { code: 'da', name: 'Dansk' },           // Danish
    { code: 'de', name: 'Deutsch' },         // German
 // { code: 'et', name: 'Eesti' },           // Estonian
 // { code: 'el', name: 'Ελληνικά' },        // Greek
@@ -136,127 +148,12 @@ export const languages: Language[] = [
 ];
 
 export const specialBlocks = {
-  '0': {
-    labelEvent: 'Genesis',
-    labelEventCompleted: 'The Genesis of Bitcoin',
-    networks: ['mainnet', 'testnet'],
-  },
-  '210000': {
-    labelEvent: 'Bitcoin\'s 1st Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 25 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '420000': {
-    labelEvent: 'Bitcoin\'s 2nd Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 12.5 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '630000': {
-    labelEvent: 'Bitcoin\'s 3rd Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 6.25 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
   '709632': {
     labelEvent: 'Taproot 🌱 activation',
     labelEventCompleted: 'Taproot 🌱 has been activated!',
-    networks: ['mainnet'],
   },
   '840000': {
-    labelEvent: 'Bitcoin\'s 4th Halving',
+    labelEvent: 'Halving 🥳',
     labelEventCompleted: 'Block Subsidy has halved to 3.125 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '1050000': {
-    labelEvent: 'Bitcoin\'s 5th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 1.5625 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '1260000': {
-    labelEvent: 'Bitcoin\'s 6th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.78125 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '1470000': {
-    labelEvent: 'Bitcoin\'s 7th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.390625 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '1680000': {
-    labelEvent: 'Bitcoin\'s 8th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.1953125 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '1890000': {
-    labelEvent: 'Bitcoin\'s 9th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.09765625 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '2100000': {
-    labelEvent: 'Bitcoin\'s 10th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.04882812 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '2310000': {
-    labelEvent: 'Bitcoin\'s 11th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.02441406 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '2520000': {
-    labelEvent: 'Bitcoin\'s 12th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.01220703 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '2730000': {
-    labelEvent: 'Bitcoin\'s 13th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.00610351 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '2940000': {
-    labelEvent: 'Bitcoin\'s 14th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.00305175 BTC per block',
-    networks: ['mainnet', 'testnet'],
-  },
-  '3150000': {
-    labelEvent: 'Bitcoin\'s 15th Halving',
-    labelEventCompleted: 'Block Subsidy has halved to 0.00152587 BTC per block',
-    networks: ['mainnet', 'testnet'],
   }
-};
-
-export const fiatCurrencies = {
-  AUD: {
-    name: 'Australian Dollar',
-    code: 'AUD',
-    indexed: true,
-  },
-  CAD: {
-    name: 'Canadian Dollar',
-    code: 'CAD',
-    indexed: true,
-  },
-  CHF: {
-    name: 'Swiss Franc',
-    code: 'CHF',
-    indexed: true,
-  },
-  EUR: {
-    name: 'Euro',
-    code: 'EUR',
-    indexed: true,
-  },
-  GBP: {
-    name: 'Pound Sterling',
-    code: 'GBP',
-    indexed: true,
-  },
-  JPY: {
-    name: 'Japanese Yen',
-    code: 'JPY',
-    indexed: true,
-  },
-  USD: {
-    name: 'US Dollar',
-    code: 'USD',
-    indexed: true,
-  },
 };

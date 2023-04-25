@@ -4,7 +4,7 @@
       <div class="card mb-3">
         <div class="card-header">
           <div class="d-flex d-md-block align-items-baseline">
-            <span i18n="statistics.memory-by-vBytes">Mempool by vBytes (sat/vByte)</span>
+            <span i18n="statistics.memory-by-vBytes">Mempool by vBytes (zubrin/vByte)</span>
             <button class="btn p-0 pl-2" style="margin: 0 0 4px 0px" (click)="onSaveChart('mempool')">
               <fa-icon [icon]="['fas', 'download']" [fixedWidth]="true"></fa-icon>
             </button>
@@ -48,9 +48,6 @@
               </label>
               <label class="btn btn-primary btn-sm" [class.active]="radioGroupForm.get('dateSpan').value === '3y'">
                 <input type="radio" [value]="'3y'" [routerLink]="['/graphs' | relativeUrl]" fragment="3y" formControlName="dateSpan"> 3Y
-              </label>
-              <label class="btn btn-primary btn-sm" [class.active]="radioGroupForm.get('dateSpan').value === '4y'">
-                <input type="radio" [value]="'4y'" [routerLink]="['/graphs' | relativeUrl]" fragment="4y" formControlName="dateSpan"> 4Y
               </label>
             </div>
             <div class="small-buttons">

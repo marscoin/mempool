@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input, OnInit } from '@angular/core
 import { map, Observable } from 'rxjs';
 import { INodesRanking, ITopNodesPerCapacity } from '../../../interfaces/node-api.interface';
 import { SeoService } from '../../../services/seo.service';
-import { StateService } from '../../../services/state.service';
+import { isMobile } from '../../../shared/common.utils';
 import { GeolocationData } from '../../../shared/components/geolocation/geolocation.component';
 import { LightningApiService } from '../../lightning-api.service';
 
@@ -18,22 +18,18 @@ export class TopNodesPerCapacity implements OnInit {
   
   topNodesPerCapacity$: Observable<ITopNodesPerCapacity[]>;
   skeletonRows: number[] = [];
-  currency$: Observable<string>;
 
   constructor(
     private apiService: LightningApiService,
-    private seoService: SeoService,
-    private stateService: StateService,
+    private seoService: SeoService
   ) {}
 
   ngOnInit(): void {
-    this.currency$ = this.stateService.fiatCurrency$;
-
     if (!this.widget) {
       this.seoService.setTitle($localize`:@@2d9883d230a47fbbb2ec969e32a186597ea27405:Liquidity Ranking`);
     }
 
-    for (let i = 1; i <= (this.widget ? 6 : 100); ++i) {
+    for (let i = 1; i <= (this.widget ? (isMobile() ? 8 : 7) : 100); ++i) {
       this.skeletonRows.push(i);
     }
 
@@ -54,7 +50,7 @@ export class TopNodesPerCapacity implements OnInit {
     } else {
       this.topNodesPerCapacity$ = this.nodes$.pipe(
         map((ranking) => {
-          return ranking.topByCapacity.slice(0, 6);
+          return ranking.topByCapacity.slice(0, isMobile() ? 8 : 7);
         })
       );
     }

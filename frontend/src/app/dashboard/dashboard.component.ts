@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit } from '@angular/core';
-import { combineLatest, merge, Observable, of, Subscription } from 'rxjs';
+import { ChangeDetectionStrategy, Component, Inject, LOCALE_ID, OnInit } from '@angular/core';
+import { combineLatest, merge, Observable, of } from 'rxjs';
 import { filter, map, scan, share, switchMap, tap } from 'rxjs/operators';
 import { BlockExtended, OptimizedMempoolStats } from '../interfaces/node-api.interface';
 import { MempoolInfo, TransactionStripped } from '../interfaces/websocket.interface';
@@ -7,6 +7,7 @@ import { ApiService } from '../services/api.service';
 import { StateService } from '../services/state.service';
 import { WebsocketService } from '../services/websocket.service';
 import { SeoService } from '../services/seo.service';
+import { StorageService } from '../services/storage.service';
 
 interface MempoolBlocksData {
   blocks: number;
@@ -31,7 +32,7 @@ interface MempoolStatsData {
   styleUrls: ['./dashboard.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class DashboardComponent implements OnInit, OnDestroy {
+export class DashboardComponent implements OnInit {
   featuredAssets$: Observable<any>;
   network$: Observable<string>;
   mempoolBlocksData$: Observable<MempoolBlocksData>;
@@ -46,19 +47,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   transactionsWeightPerSecondOptions: any;
   isLoadingWebSocket$: Observable<boolean>;
   liquidPegsMonth$: Observable<any>;
-  currencySubscription: Subscription;
-  currency: string;
 
   constructor(
+    @Inject(LOCALE_ID) private locale: string,
     public stateService: StateService,
     private apiService: ApiService,
     private websocketService: WebsocketService,
-    private seoService: SeoService
+    private seoService: SeoService,
+    private storageService: StorageService,
   ) { }
-
-  ngOnDestroy(): void {
-    this.currencySubscription.unsubscribe();
-  }
 
   ngOnInit(): void {
     this.isLoadingWebSocket$ = this.stateService.isLoadingWebSocket$;
@@ -78,12 +75,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
       map(([mempoolInfo, vbytesPerSecond]) => {
         const percent = Math.round((Math.min(vbytesPerSecond, this.vBytesPerSecondLimit) / this.vBytesPerSecondLimit) * 100);
 
-        let progressColor = 'bg-success';
+        let progressColor = '#7CB342';
         if (vbytesPerSecond > 1667) {
-          progressColor = 'bg-warning';
+          progressColor = '#FDD835';
+        }
+        if (vbytesPerSecond > 2000) {
+          progressColor = '#FFB300';
+        }
+        if (vbytesPerSecond > 2500) {
+          progressColor = '#FB8C00';
         }
         if (vbytesPerSecond > 3000) {
-          progressColor = 'bg-danger';
+          progressColor = '#F4511E';
+        }
+        if (vbytesPerSecond > 3500) {
+          progressColor = '#D81B60';
         }
 
         const mempoolSizePercentage = (mempoolInfo.usage / mempoolInfo.maxmempool * 100);
@@ -207,10 +213,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           share(),
         );
     }
-
-    this.currencySubscription = this.stateService.fiatCurrency$.subscribe((fiat) => {
-      this.currency = fiat;
-    });
   }
 
   handleNewMempoolData(mempoolStats: OptimizedMempoolStats[]) {

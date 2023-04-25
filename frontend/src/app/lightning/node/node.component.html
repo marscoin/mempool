@@ -1,23 +1,20 @@
 <div class="container-xl" *ngIf="(node$ | async) as node; else skeletonLoader">
-
-  <ng-container *ngIf="!error">
-    <h5 class="mb-0" style="color: #ffffff66" i18n="lightning.node">Lightning node</h5>
-    <div class="title-container mb-2">
-      <h1 class="mb-0 text-truncate">{{ node.alias }}</h1>
-      <span class="tx-link">
-        <span class="node-id">
-          <app-truncate [text]="node.public_key" [lastChars]="8" [link]="['/lightning/node' | relativeUrl, node.public_key]">
-            <app-clipboard [text]="node.public_key"></app-clipboard>
-          </app-truncate>
-        </span>
+  <h5 class="mb-0" style="color: #ffffff66" i18n="lightning.node">Lightning node</h5>
+  <div class="title-container mb-2" *ngIf="!error">
+    <h1 class="mb-0 text-truncate">{{ node.alias }}</h1>
+    <span class="tx-link">
+      <span class="node-id">
+        <app-truncate [text]="node.public_key" [lastChars]="8" [link]="['/lightning/node' | relativeUrl, node.public_key]">
+          <app-clipboard [text]="node.public_key"></app-clipboard>
+        </app-truncate>
       </span>
-    </div>
-  </ng-container>
+    </span>
+  </div>
 
   <div class="clearfix"></div>
 
   <div *ngIf="error" class="d-flex flex-column justify-content-around align-items-center mt-5 w-100" style="min-height: 100px">
-    <span class="text-center">No node found for public key "{{ node.public_key | shortenString : 12}}"</span>
+    <span i18n="lightning.node-not-found">No node found for public key "{{ node.public_key | shortenString : 12}}"</span>
   </div>
 
   <div class="box" *ngIf="!error">
@@ -57,7 +54,7 @@
             </tr>
             <tr *ngIf="(avgChannelDistance$ | async) as avgDistance;">
               <td i18n="lightning.avg-distance" class="text-truncate">Avg channel distance</td>
-              <td class="direction-ltr">{{ avgDistance | amountShortener: 1 }} <span class="symbol">km</span> <span class="separator">·</span>{{ kmToMiles(avgDistance) | amountShortener: 1 }} <span class="symbol">mi</span></td>
+              <td>{{ avgDistance | number : '1.0-0' }} <span class="symbol">km</span> <span class="separator">/</span> {{ kmToMiles(avgDistance) | number : '1.0-0' }} <span class="symbol">mi</span></td>
             </tr>
           </tbody>
         </table>

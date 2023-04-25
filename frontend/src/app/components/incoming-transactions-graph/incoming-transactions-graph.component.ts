@@ -118,7 +118,7 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges {
               itemFormatted += `<div class="item">
                 <div class="indicator-container">${colorSpan(item.color)}</div>
                 <div class="grow"></div>
-                <div class="value">${formatNumber(item.value[1], this.locale, '1.0-0')}<span class="symbol">vB/s</span></div>
+                <div class="value">${formatNumber(item.value[1], this.locale, '1.0-0')}<span class="symbol">vB/z</span></div>
               </div>`;
             }
           });

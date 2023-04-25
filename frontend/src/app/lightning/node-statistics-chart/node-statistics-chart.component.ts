@@ -75,13 +75,13 @@ export class NodeStatisticsChartComponent implements OnInit {
 
   prepareChartOptions(data) {
     let title: object;
-    if (data.channels.length < 2) {
+    if (data.channels.length === 0) {
       title = {
         textStyle: {
           color: 'grey',
           fontSize: 15
         },
-        text: $localize`No data to display yet. Try again later.`,
+        text: `Loading`,
         left: 'center',
         top: 'center'
       };
@@ -135,18 +135,18 @@ export class NodeStatisticsChartComponent implements OnInit {
           return tooltip;
         }
       },
-      xAxis: data.channels.length < 2 ? undefined : {
+      xAxis: data.channels.length === 0 ? undefined : {
         type: 'time',
         splitNumber: this.isMobile() ? 5 : 10,
         axisLabel: {
           hideOverlap: true,
         }
       },
-      legend: data.channels.length < 2 ? undefined : {
+      legend: data.channels.length === 0 ? undefined : {
         padding: 10,
         data: [
           {
-            name: $localize`:@@807cf11e6ac1cde912496f764c176bdfdd6b7e19:Channels`,
+            name: 'Channels',
             inactiveColor: 'rgb(110, 112, 121)',
             textStyle: {
               color: 'white',
@@ -154,7 +154,7 @@ export class NodeStatisticsChartComponent implements OnInit {
             icon: 'roundRect',
           },
           {
-            name: $localize`:@@ce9dfdc6dccb28dc75a78c704e09dc18fb02dcfa:Capacity`,
+            name: 'Capacity',
             inactiveColor: 'rgb(110, 112, 121)',
             textStyle: {
               color: 'white',
@@ -167,7 +167,7 @@ export class NodeStatisticsChartComponent implements OnInit {
           'Capacity': true,
         }
       },
-      yAxis: data.channels.length < 2 ? undefined : [
+      yAxis: data.channels.length === 0 ? undefined : [
         {
           type: 'value',
           axisLabel: {
@@ -198,10 +198,10 @@ export class NodeStatisticsChartComponent implements OnInit {
           }
         }
       ],
-      series: data.channels.length < 2 ? [] : [
+      series: data.channels.length === 0 ? [] : [
         {
           zlevel: 1,
-          name: $localize`:@@807cf11e6ac1cde912496f764c176bdfdd6b7e19:Channels`,
+          name: 'Channels',
           showSymbol: false,
           symbol: 'none',
           data: data.channels,
@@ -224,7 +224,7 @@ export class NodeStatisticsChartComponent implements OnInit {
         {
           zlevel: 0,
           yAxisIndex: 1,
-          name: $localize`:@@ce9dfdc6dccb28dc75a78c704e09dc18fb02dcfa:Capacity`,
+          name: 'Capacity',
           showSymbol: false,
           symbol: 'none',
           stack: 'Total',

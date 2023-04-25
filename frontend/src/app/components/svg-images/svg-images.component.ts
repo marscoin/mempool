@@ -13,5 +13,4 @@ export class SvgImagesComponent {
   @Input() width: string;
   @Input() height: string;
   @Input() viewBox: string;
-  @Input() fill: string;
 }

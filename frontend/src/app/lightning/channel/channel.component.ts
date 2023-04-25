@@ -38,9 +38,7 @@ export class ChannelComponent implements OnInit {
               }),
               catchError((err) => {
                 this.error = err;
-                return [{
-                  short_id: params.get('short_id')
-                }];
+                return of(null);
               })
             );
         }),

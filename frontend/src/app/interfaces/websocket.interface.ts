@@ -43,7 +43,6 @@ export interface MempoolBlock {
   totalFees: number;
   feeRange: number[];
   index: number;
-  isStack?: boolean;
 }
 
 export interface MempoolBlockWithTransactions extends MempoolBlock {

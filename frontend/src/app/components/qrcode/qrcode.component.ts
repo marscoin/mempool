@@ -12,7 +12,6 @@ export class QrcodeComponent implements AfterViewInit {
   @Input() data: string;
   @Input() size = 125;
   @Input() imageUrl: string;
-  @Input() border = 0;
   @ViewChild('canvas') canvas: ElementRef;
 
   qrcodeObject: any;
